@@ -1,0 +1,94 @@
+name: Windows GRF Build
+
+on:
+  push:
+    branches:
+      - agent/windows-build-fix
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-2022
+    timeout-minutes: 120
+
+    env:
+      CMAKE_POLICY_VERSION_MINIMUM: "3.10"
+      VCPKG_DISABLE_METRICS: "1"
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+    steps:
+      - name: Checkout CENTELLA Football
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python 3.10 x64
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10.11"
+          architecture: "x64"
+
+      - name: Verify architecture and Visual Studio
+        shell: pwsh
+        run: |
+          python -c "import struct,sys,platform,sysconfig; print(sys.executable); print('bits=', struct.calcsize('P')*8); print('machine=', platform.machine()); print('platform=', sysconfig.get_platform())"
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+
+      - name: Prepare Python packaging tools
+        shell: pwsh
+        run: |
+          python -m pip install "pip==23.2.1" "setuptools==65.5.0" "wheel==0.38.4" psutil
+
+      - name: Prepare isolated modern vcpkg
+        shell: pwsh
+        run: |
+          $vcpkgRoot = Join-Path $env:RUNNER_TEMP "centella-vcpkg"
+          git clone --filter=blob:none https://github.com/microsoft/vcpkg.git $vcpkgRoot
+          & (Join-Path $vcpkgRoot "bootstrap-vcpkg.bat") -disableMetrics
+          "VCPKG_ROOT=$vcpkgRoot" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "VCPKG_DEFAULT_BINARY_CACHE=$env:RUNNER_TEMP\centella-vcpkg-cache" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          New-Item -ItemType Directory -Force "$env:RUNNER_TEMP\centella-vcpkg-cache" | Out-Null
+
+      - name: Build and install Google Research Football
+        shell: pwsh
+        run: |
+          $env:CMAKE_POLICY_VERSION_MINIMUM = "3.10"
+          python -m pip install . --no-build-isolation -v
+
+      - name: Verify import
+        shell: pwsh
+        run: |
+          python -c "import gfootball; import gfootball_engine; print('GRF import OK')"
+
+      - name: Collect build logs
+        if: always()
+        shell: pwsh
+        run: |
+          $out = Join-Path $env:RUNNER_TEMP "centella-build-logs"
+          New-Item -ItemType Directory -Force $out | Out-Null
+
+          $manifestLog = "third_party\gfootball_engine\build_win\vcpkg-manifest-install.log"
+          if (Test-Path $manifestLog) {
+            Copy-Item $manifestLog (Join-Path $out "vcpkg-manifest-install.log") -Force
+          }
+
+          if ($env:VCPKG_ROOT -and (Test-Path (Join-Path $env:VCPKG_ROOT "buildtrees"))) {
+            Get-ChildItem (Join-Path $env:VCPKG_ROOT "buildtrees") -Recurse -File -ErrorAction SilentlyContinue |
+              Where-Object { $_.Name -match '(out|err)\.log$' } |
+              ForEach-Object {
+                $safe = ($_.FullName.Substring($env:VCPKG_ROOT.Length).TrimStart('\\') -replace '[\\/:*?"<>|]', '_')
+                Copy-Item $_.FullName (Join-Path $out $safe) -Force -ErrorAction SilentlyContinue
+              }
+          }
+
+          Get-ChildItem $out -File -ErrorAction SilentlyContinue | Select-Object Name,Length
+
+      - name: Upload build logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: centella-windows-build-logs
+          path: ${{ runner.temp }}/centella-build-logs
+          if-no-files-found: ignore
+          retention-days: 7
