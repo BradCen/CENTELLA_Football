@@ -27,3 +27,10 @@ cmake_install.cmake
 # IDE
 .idea
 .vs*
+
+# CENTELLA Football - archivos locales
+*.centella_backup_*
+*.log
+.vscode/
+.venv/
+__pycache__/
