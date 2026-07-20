@@ -76,7 +76,64 @@ jobs:
         shell: pwsh
         run: |
           $env:CMAKE_POLICY_VERSION_MINIMUM = "3.10"
-          python -m pip install . --no-build-isolation -v
+          $PSNativeCommandUseErrorActionPreference = $false
+
+          function Invoke-GrfBuild {
+            python -m pip install . --no-build-isolation -v
+            return $LASTEXITCODE
+          }
+
+          # First pass installs the historical dependency graph. With Boost 1.80,
+          # the old filesystem port can request a vc140-named Atomic import library
+          # even though VS 2022/b2 emits a vc144 name. Let vcpkg reach that point,
+          # create a compatibility alias, then resume the same manifest install.
+          $firstExit = Invoke-GrfBuild
+          if ($firstExit -eq 0) {
+            Write-Host "GRF build succeeded on first pass."
+            exit 0
+          }
+
+          Write-Host "First build pass exited with $firstExit. Checking for the known Boost 1.80 vc140 alias mismatch..."
+          $installedRoot = Join-Path $PWD "third_party\gfootball_engine\build_win\vcpkg_installed\x64-windows"
+          $aliasesCreated = 0
+
+          $aliasPairs = @(
+            @{ Dir = (Join-Path $installedRoot "debug\lib"); Target = "boost_atomic-vc140-mt-gd.lib" },
+            @{ Dir = (Join-Path $installedRoot "lib");       Target = "boost_atomic-vc140-mt.lib" }
+          )
+
+          foreach ($pair in $aliasPairs) {
+            $dir = $pair.Dir
+            $target = Join-Path $dir $pair.Target
+            if (-not (Test-Path $dir)) { continue }
+            if (Test-Path $target) {
+              Write-Host "Compatibility alias already exists: $target"
+              continue
+            }
+
+            $source = Get-ChildItem $dir -Filter "boost_atomic*.lib" -File -ErrorAction SilentlyContinue |
+              Where-Object { $_.Name -ne $pair.Target } |
+              Sort-Object Name |
+              Select-Object -First 1
+
+            if ($source) {
+              Copy-Item $source.FullName $target -Force
+              Write-Host "Created compatibility alias: $($source.Name) -> $($pair.Target)"
+              $aliasesCreated++
+            }
+          }
+
+          if ($aliasesCreated -eq 0) {
+            Write-Host "No Boost Atomic alias could be created; preserving the original build failure."
+            exit $firstExit
+          }
+
+          Write-Host "Retrying GRF build after Boost compatibility repair..."
+          $secondExit = Invoke-GrfBuild
+          if ($secondExit -ne 0) {
+            Write-Host "Second build pass failed with exit code $secondExit. Logs will be uploaded for the next targeted fix."
+            exit $secondExit
+          }
 
       - name: Verify import
         shell: pwsh
