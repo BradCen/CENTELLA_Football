@@ -1,0 +1,173 @@
+name: Windows GRF Build
+
+on:
+  push:
+    branches:
+      - agent/windows-build-fix
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-2022
+    timeout-minutes: 120
+
+    env:
+      CMAKE_POLICY_VERSION_MINIMUM: "3.10"
+      VCPKG_DISABLE_METRICS: "1"
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+    steps:
+      - name: Checkout CENTELLA Football
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python 3.10 x64
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10.11"
+          architecture: "x64"
+
+      - name: Verify architecture and Visual Studio
+        shell: pwsh
+        run: |
+          python -c "import struct,sys,platform,sysconfig; print(sys.executable); print('bits=', struct.calcsize('P')*8); print('machine=', platform.machine()); print('platform=', sysconfig.get_platform())"
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+
+      - name: Prepare Python packaging tools
+        shell: pwsh
+        run: |
+          python -m pip install "pip==23.2.1" "setuptools==65.5.0" "wheel==0.38.4" psutil
+
+      - name: Prepare isolated modern vcpkg
+        shell: pwsh
+        run: |
+          $vcpkgRoot = Join-Path $env:RUNNER_TEMP "centella-vcpkg"
+          if (Test-Path $vcpkgRoot) { Remove-Item $vcpkgRoot -Recurse -Force }
+
+          # A full clone is intentional. GRF pins an old builtin-baseline, so vcpkg
+          # must have the historical Git objects locally. A partial/promisor clone
+          # can fail later while resolving old ports if an on-demand fetch is lost.
+          $cloned = $false
+          for ($attempt = 1; $attempt -le 3 -and -not $cloned; $attempt++) {
+            Write-Host "Cloning full vcpkg repository (attempt $attempt/3)..."
+            git clone https://github.com/microsoft/vcpkg.git $vcpkgRoot
+            if ($LASTEXITCODE -eq 0) {
+              $cloned = $true
+            } else {
+              if (Test-Path $vcpkgRoot) { Remove-Item $vcpkgRoot -Recurse -Force }
+              Start-Sleep -Seconds (5 * $attempt)
+            }
+          }
+          if (-not $cloned) { throw "Unable to clone vcpkg after 3 attempts" }
+
+          & (Join-Path $vcpkgRoot "bootstrap-vcpkg.bat") -disableMetrics
+          if ($LASTEXITCODE -ne 0) { throw "vcpkg bootstrap failed" }
+
+          "VCPKG_ROOT=$vcpkgRoot" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "VCPKG_DEFAULT_BINARY_CACHE=$env:RUNNER_TEMP\centella-vcpkg-cache" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          New-Item -ItemType Directory -Force "$env:RUNNER_TEMP\centella-vcpkg-cache" | Out-Null
+
+      - name: Build and install Google Research Football
+        shell: pwsh
+        run: |
+          $env:CMAKE_POLICY_VERSION_MINIMUM = "3.10"
+          $PSNativeCommandUseErrorActionPreference = $false
+
+          function Invoke-GrfBuild {
+            python -m pip install . --no-build-isolation -v
+            return $LASTEXITCODE
+          }
+
+          # First pass installs the historical dependency graph. With Boost 1.80,
+          # the old filesystem port can request a vc140-named Atomic import library
+          # even though VS 2022/b2 emits a vc144 name. Let vcpkg reach that point,
+          # create a compatibility alias, then resume the same manifest install.
+          $firstExit = Invoke-GrfBuild
+          if ($firstExit -eq 0) {
+            Write-Host "GRF build succeeded on first pass."
+            exit 0
+          }
+
+          Write-Host "First build pass exited with $firstExit. Checking for the known Boost 1.80 vc140 alias mismatch..."
+          $installedRoot = Join-Path $PWD "third_party\gfootball_engine\build_win\vcpkg_installed\x64-windows"
+          $aliasesCreated = 0
+
+          $aliasPairs = @(
+            @{ Dir = (Join-Path $installedRoot "debug\lib"); Target = "boost_atomic-vc140-mt-gd.lib" },
+            @{ Dir = (Join-Path $installedRoot "lib");       Target = "boost_atomic-vc140-mt.lib" }
+          )
+
+          foreach ($pair in $aliasPairs) {
+            $dir = $pair.Dir
+            $target = Join-Path $dir $pair.Target
+            if (-not (Test-Path $dir)) { continue }
+            if (Test-Path $target) {
+              Write-Host "Compatibility alias already exists: $target"
+              continue
+            }
+
+            $source = Get-ChildItem $dir -Filter "boost_atomic*.lib" -File -ErrorAction SilentlyContinue |
+              Where-Object { $_.Name -ne $pair.Target } |
+              Sort-Object Name |
+              Select-Object -First 1
+
+            if ($source) {
+              Copy-Item $source.FullName $target -Force
+              Write-Host "Created compatibility alias: $($source.Name) -> $($pair.Target)"
+              $aliasesCreated++
+            }
+          }
+
+          if ($aliasesCreated -eq 0) {
+            Write-Host "No Boost Atomic alias could be created; preserving the original build failure."
+            exit $firstExit
+          }
+
+          Write-Host "Retrying GRF build after Boost compatibility repair..."
+          $secondExit = Invoke-GrfBuild
+          if ($secondExit -ne 0) {
+            Write-Host "Second build pass failed with exit code $secondExit. Logs will be uploaded for the next targeted fix."
+            exit $secondExit
+          }
+
+      - name: Verify import
+        shell: pwsh
+        run: |
+          python -c "import gfootball; import gfootball_engine; print('GRF import OK')"
+
+      - name: Collect build logs
+        if: always()
+        shell: pwsh
+        run: |
+          $out = Join-Path $env:RUNNER_TEMP "centella-build-logs"
+          New-Item -ItemType Directory -Force $out | Out-Null
+
+          $manifestLog = "third_party\gfootball_engine\build_win\vcpkg-manifest-install.log"
+          if (Test-Path $manifestLog) {
+            Copy-Item $manifestLog (Join-Path $out "vcpkg-manifest-install.log") -Force
+          }
+
+          if ($env:VCPKG_ROOT -and (Test-Path (Join-Path $env:VCPKG_ROOT "buildtrees"))) {
+            Get-ChildItem (Join-Path $env:VCPKG_ROOT "buildtrees") -Recurse -File -ErrorAction SilentlyContinue |
+              Where-Object { $_.Name -match '(out|err)\.log$' } |
+              ForEach-Object {
+                $safe = ($_.FullName.Substring($env:VCPKG_ROOT.Length).TrimStart('\\') -replace '[\\/:*?"<>|]', '_')
+                Copy-Item $_.FullName (Join-Path $out $safe) -Force -ErrorAction SilentlyContinue
+              }
+          }
+
+          Get-ChildItem $out -File -ErrorAction SilentlyContinue | Select-Object Name,Length
+
+      - name: Upload build logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: centella-windows-build-logs
+          path: ${{ runner.temp }}/centella-build-logs
+          if-no-files-found: ignore
+          retention-days: 7
