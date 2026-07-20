@@ -47,8 +47,27 @@ jobs:
         shell: pwsh
         run: |
           $vcpkgRoot = Join-Path $env:RUNNER_TEMP "centella-vcpkg"
-          git clone --filter=blob:none https://github.com/microsoft/vcpkg.git $vcpkgRoot
+          if (Test-Path $vcpkgRoot) { Remove-Item $vcpkgRoot -Recurse -Force }
+
+          # A full clone is intentional. GRF pins an old builtin-baseline, so vcpkg
+          # must have the historical Git objects locally. A partial/promisor clone
+          # can fail later while resolving old ports if an on-demand fetch is lost.
+          $cloned = $false
+          for ($attempt = 1; $attempt -le 3 -and -not $cloned; $attempt++) {
+            Write-Host "Cloning full vcpkg repository (attempt $attempt/3)..."
+            git clone https://github.com/microsoft/vcpkg.git $vcpkgRoot
+            if ($LASTEXITCODE -eq 0) {
+              $cloned = $true
+            } else {
+              if (Test-Path $vcpkgRoot) { Remove-Item $vcpkgRoot -Recurse -Force }
+              Start-Sleep -Seconds (5 * $attempt)
+            }
+          }
+          if (-not $cloned) { throw "Unable to clone vcpkg after 3 attempts" }
+
           & (Join-Path $vcpkgRoot "bootstrap-vcpkg.bat") -disableMetrics
+          if ($LASTEXITCODE -ne 0) { throw "vcpkg bootstrap failed" }
+
           "VCPKG_ROOT=$vcpkgRoot" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "VCPKG_DEFAULT_BINARY_CACHE=$env:RUNNER_TEMP\centella-vcpkg-cache" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           New-Item -ItemType Directory -Force "$env:RUNNER_TEMP\centella-vcpkg-cache" | Out-Null
