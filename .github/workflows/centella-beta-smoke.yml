@@ -38,7 +38,9 @@ jobs:
           import centella.modes
           import centella.runtime
           import centella.ui
+          import centella.audio
           import centella.beta_frontend
+          import centella.product_frontend
           print('IMPORTS OK')
           PY
 
@@ -61,7 +63,7 @@ jobs:
         run: |
           python - <<'PY'
           import pygame
-          from centella.beta_frontend import App
+          from centella.product_frontend import App
           from centella.controller import InputAction
           from centella.modes import MODES
 
@@ -71,17 +73,15 @@ jobs:
           assert app.scene == 'hub'
           app.render()
 
-          # Every main tab must render and expose real cards.
           for tab_index in range(5):
               app.set_tab(tab_index)
               assert MODES[app.tab_name]
               app.render()
 
-          # Render every implemented product scene at least once.
           scenes = [
               'quick', 'coop', 'training', 'career', 'street', 'journey',
               'online', 'edit', 'player', 'tournament', 'setpiece', 'controls',
-              'video', 'access', 'workshop', 'doctor', 'detail'
+              'video', 'access', 'workshop', 'doctor', 'detail', 'prematch'
           ]
           for scene in scenes:
               if scene == 'detail':
@@ -90,7 +90,6 @@ jobs:
               app.render()
               print('SCENE OK', scene)
 
-          # Basic navigation path back into a playable match setup.
           app.set_tab(1)
           app.open_mode(MODES['PLAY'][0])
           assert app.scene == 'quick'
