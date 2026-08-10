@@ -162,14 +162,9 @@ class App(BetaApp):
             self._selection_seen = self.selected
             self._selection_changed_at = time.perf_counter()
 
-    # ------------------------------------------------------------------
-    # Presentation primitives
-    # ------------------------------------------------------------------
-
     def _draw_stage(self, canvas: pygame.Surface, intensity: float = 1.0) -> None:
         draw_stadium_scene(canvas, self.elapsed, BRAND.sapphire, intensity, self.motion())
         t = self.elapsed
-
         veil = pygame.Surface(LOGICAL_SIZE, pygame.SRCALPHA)
         veil.fill((2, 4, 10, 72))
         canvas.blit(veil, (0, 0))
@@ -178,25 +173,18 @@ class App(BetaApp):
         pulse = 1.0 + (0.025 * math.sin(t * 1.6) if self.motion() else 0.0)
         for radius, alpha, width in ((330, 24, 2), (260, 38, 2), (190, 55, 3)):
             r = int(radius * pulse)
-            pygame.draw.arc(
-                canvas,
-                (*BRAND.sapphire_light, alpha),
-                pygame.Rect(cx - r, cy - r, r * 2, r * 2),
-                math.radians(198),
-                math.radians(518),
-                width,
-            )
+            pygame.draw.arc(canvas, (*BRAND.sapphire_light, alpha),
+                            pygame.Rect(cx - r, cy - r, r * 2, r * 2),
+                            math.radians(198), math.radians(518), width)
 
         panes = pygame.Surface(LOGICAL_SIZE, pygame.SRCALPHA)
         shift = int((math.sin(t * 0.45) * 24) if self.motion() else 0)
-        pygame.draw.polygon(
-            panes, (*BRAND.sapphire, 24),
-            [(1110 + shift, 0), (1450 + shift, 0), (1120 + shift, 1080), (780 + shift, 1080)]
-        )
-        pygame.draw.polygon(
-            panes, (255, 255, 255, 10),
-            [(1500 - shift, 0), (1690 - shift, 0), (1480 - shift, 1080), (1290 - shift, 1080)]
-        )
+        pygame.draw.polygon(panes, (*BRAND.sapphire, 24),
+                            [(1110 + shift, 0), (1450 + shift, 0),
+                             (1120 + shift, 1080), (780 + shift, 1080)])
+        pygame.draw.polygon(panes, (255, 255, 255, 10),
+                            [(1500 - shift, 0), (1690 - shift, 0),
+                             (1480 - shift, 1080), (1290 - shift, 1080)])
         canvas.blit(panes, (0, 0))
 
         vignette = pygame.Surface(LOGICAL_SIZE, pygame.SRCALPHA)
@@ -213,15 +201,15 @@ class App(BetaApp):
             label = TAB_LABELS.get(name, name)
             selected = i == self.tab
             color = BRAND.white if selected else (136, 147, 166)
-            rect = draw_text(canvas, label, self.f16, color, (x, 73))
-            hit = pygame.Rect(rect.x - 18, rect.y - 16, rect.w + 36, 56)
+            rect = draw_text(canvas, label, self.f20, color, (x, 70))
+            hit = pygame.Rect(rect.x - 18, rect.y - 16, rect.w + 36, 60)
             if selected:
                 pygame.draw.rect(canvas, BRAND.sapphire_light,
                                  (rect.x, rect.bottom + 11, rect.w, 4), border_radius=2)
             self.add_region(hit, "tab", i)
             x = rect.right + 48
-        draw_text(canvas, self.controller.primary_name().upper(), self.f12,
-                  (145, 155, 174), (1820, 76), "topright")
+        draw_text(canvas, self.controller.primary_name().upper(), self.f16,
+                  (145, 155, 174), (1820, 73), "topright")
 
     def page_header(self, canvas, title, subtitle=""):
         self._draw_stage(canvas, 0.62)
@@ -235,7 +223,7 @@ class App(BetaApp):
         x = int(96 + (1 - p) * 34)
         draw_text(canvas, title, self._display_hero, BRAND.white, (x, 178), alpha=int(255 * p))
         if subtitle:
-            draw_text(canvas, subtitle, self.f16, (151, 162, 181), (x + 3, 266), alpha=int(255 * p))
+            draw_text(canvas, subtitle, self.f20, (171, 182, 198), (x + 3, 263), alpha=int(255 * p))
         pygame.draw.line(canvas, (*BRAND.sapphire, int(210 * p)), (96, 310), (1824, 310), 2)
 
     def option(self, canvas, y, label, value, index):
@@ -250,16 +238,44 @@ class App(BetaApp):
             rounded_panel(canvas, rect, (10, 15, 25), (48, 58, 74), 14, 1, 220)
             label_color = (211, 218, 229)
             value_color = (151, 164, 184)
-        draw_text(canvas, label, self.f16, label_color, (124, y + 20))
-        draw_text(canvas, str(value), self.f16, value_color, (1098, y + 20), "topright")
+        draw_text(canvas, label, self.f20, label_color, (124, y + 17))
+        draw_text(canvas, str(value), self.f20, value_color, (1098, y + 17), "topright")
         self.add_region(rect, "cursor", index)
+
+    def _draw_wrapped(self, canvas, text, fnt, color, rect, max_lines=2, line_gap=4):
+        words = text.split()
+        lines = []
+        current = ""
+        for word in words:
+            candidate = word if not current else current + " " + word
+            if fnt.size(candidate)[0] <= rect.w:
+                current = candidate
+                continue
+            if current:
+                lines.append(current)
+            current = word
+            if len(lines) >= max_lines:
+                break
+        if current and len(lines) < max_lines:
+            lines.append(current)
+        if len(lines) == max_lines and words:
+            rendered_words = " ".join(lines).split()
+            if len(rendered_words) < len(words):
+                last = lines[-1]
+                while last and fnt.size(last + "…")[0] > rect.w:
+                    last = last[:-1]
+                lines[-1] = last.rstrip() + "…"
+        y = rect.y
+        for line in lines:
+            draw_text(canvas, line, fnt, color, (rect.x, y))
+            y += fnt.get_linesize() + line_gap
 
     def draw_bottom(self, canvas):
         if self.scene in ("splash", "prematch"):
             return
         pygame.draw.line(canvas, (45, 54, 70), (62, 1022), (1858, 1022), 1)
-        draw_text(canvas, "B / ESC   VOLVER", self.f12, (132, 143, 160), (74, 1043))
-        draw_text(canvas, self.controller.ui_hint(), self.f12, (221, 226, 235), (1846, 1043), "topright")
+        draw_text(canvas, "B / ESC   VOLVER", self.f16, (142, 153, 170), (74, 1038))
+        draw_text(canvas, self.controller.ui_hint(), self.f16, (221, 226, 235), (1846, 1038), "topright")
 
     def _draw_scene_transition(self, canvas):
         if self.scene == "splash" or self.elapsed >= 0.22:
@@ -271,10 +287,6 @@ class App(BetaApp):
         x = int(1920 * p)
         pygame.draw.rect(canvas, (*BRAND.sapphire_light, int(210 * (1 - p))), (x - 4, 0, 4, 1080))
 
-    # ------------------------------------------------------------------
-    # Core scenes
-    # ------------------------------------------------------------------
-
     def draw_splash(self, canvas):
         t = self.elapsed
         self._draw_stage(canvas, 1.1)
@@ -285,7 +297,6 @@ class App(BetaApp):
         a = ease_out_cubic((t - 0.08) / 0.45)
         b = ease_out_cubic((t - 0.35) / 0.55)
         cta = ease_out_cubic((t - 1.05) / 0.48)
-
         draw_text(canvas, "CENTELLA", self._display_big, BRAND.white, (190, 378), alpha=int(255 * a))
         pygame.draw.rect(canvas, (*BRAND.sapphire_light, int(255 * b)), (196, 518, 122, 6), border_radius=3)
         draw_text(canvas, "F O O T B A L L", self.f24, BRAND.sapphire_light, (196, 552), alpha=int(255 * b))
@@ -325,9 +336,9 @@ class App(BetaApp):
 
         eyebrow, title, subtitle = HERO_COPY[self.tab_name]
         hero_x = int(96 + (1 - tab_p) * 36)
-        draw_text(canvas, eyebrow, self.f16, BRAND.sapphire_light, (hero_x, 190), alpha=int(255 * tab_p))
+        draw_text(canvas, eyebrow, self.f20, BRAND.sapphire_light, (hero_x, 186), alpha=int(255 * tab_p))
         draw_text(canvas, title, self._display_hero, BRAND.white, (hero_x, 232), alpha=int(255 * tab_p))
-        draw_text(canvas, subtitle, self.f16, (154, 166, 184), (hero_x + 3, 326), alpha=int(245 * tab_p))
+        draw_text(canvas, subtitle, self.f20, (174, 185, 201), (hero_x + 3, 326), alpha=int(245 * tab_p))
 
         panel = pygame.Rect(1255, 210, 560, 360)
         rounded_panel(canvas, panel, (8, 13, 23), (40, 52, 72), 28, 1, 205)
@@ -341,12 +352,7 @@ class App(BetaApp):
         modes = MODES[self.tab_name]
         visible = 4
         start = max(0, min(self.selected - 1, max(0, len(modes) - visible)))
-        safe_x = 96
-        gap = 18
-        card_w = 414
-        card_h = 232
-        base_y = 698
-
+        safe_x, gap, card_w, card_h, base_y = 96, 18, 414, 232, 698
         for slot, mode in enumerate(modes[start:start + visible]):
             idx = start + slot
             selected = idx == self.selected
@@ -357,21 +363,20 @@ class App(BetaApp):
             if selected:
                 rounded_panel(canvas, rect, (244, 247, 251), (255, 255, 255), 18, 1, 255)
                 pygame.draw.rect(canvas, BRAND.sapphire, (rect.x, rect.y, rect.w, 7), border_radius=4)
-                title_color = (16, 22, 33)
-                sub_color = (77, 89, 108)
-                small_color = BRAND.sapphire
+                title_color, sub_color, small_color = (16, 22, 33), (77, 89, 108), BRAND.sapphire
             else:
                 rounded_panel(canvas, rect, (10, 15, 24), (46, 55, 72), 18, 1, 220)
-                title_color = (222, 228, 237)
-                sub_color = (123, 137, 157)
-                small_color = (105, 121, 145)
+                title_color, sub_color, small_color = (222, 228, 237), (123, 137, 157), (105, 121, 145)
 
             draw_text(canvas, f"{idx + 1:02d}", self.f12, small_color, (rect.x + 26, rect.y + 24))
             draw_text(canvas, mode.title, self._display_card, title_color, (rect.x + 26, rect.y + 61))
-            draw_text(canvas, mode.subtitle, self.f16, sub_color, (rect.x + 26, rect.y + 108))
+            draw_text(canvas, mode.subtitle, self.f20, sub_color, (rect.x + 26, rect.y + 108))
             if selected:
-                draw_text(canvas, mode.description, self.f12, (92, 104, 122), (rect.x + 26, rect.y + 154))
-                draw_text(canvas, "A / ENTER  ABRIR", self.f12, BRAND.sapphire, (rect.x + 26, rect.bottom - 31))
+                self._draw_wrapped(canvas, mode.description, self.f16, (92, 104, 122),
+                                   pygame.Rect(rect.x + 26, rect.y + 151, rect.w - 52, 48),
+                                   max_lines=2, line_gap=1)
+                draw_text(canvas, "A / ENTER  ABRIR", self.f16, BRAND.sapphire,
+                          (rect.x + 26, rect.bottom - 29))
             self.add_region(rect, "mode", mode)
 
         for i in range(len(modes)):
@@ -404,17 +409,14 @@ class App(BetaApp):
         match_panel = pygame.Rect(96, 348, 1728, 330)
         rounded_panel(canvas, match_panel, (7, 12, 21), (44, 54, 71), 24, 1, 225)
         pygame.draw.rect(canvas, BRAND.sapphire, (match_panel.x, match_panel.y, match_panel.w, 5), border_radius=3)
-
-        home_selected = self.page_cursor == 0
-        away_selected = self.page_cursor == 1
+        home_selected, away_selected = self.page_cursor == 0, self.page_cursor == 1
         self._draw_team_badge(canvas, home, (410, 490), home_selected)
         self._draw_team_badge(canvas, away, (1510, 490), away_selected)
         draw_text(canvas, "VS", self._display_hero, (218, 224, 234), (960, 475), "center")
         draw_text(canvas, "LOCAL", self.f12, BRAND.sapphire_light, (410, 390), "center")
         draw_text(canvas, "VISITANTE", self.f12, BRAND.sapphire_light, (1510, 390), "center")
 
-        home_hit = pygame.Rect(236, 382, 350, 275)
-        away_hit = pygame.Rect(1334, 382, 350, 275)
+        home_hit, away_hit = pygame.Rect(236, 382, 350, 275), pygame.Rect(1334, 382, 350, 275)
         self.add_region(home_hit, "cursor", 0)
         self.add_region(away_hit, "cursor", 1)
         if home_selected:
@@ -422,12 +424,9 @@ class App(BetaApp):
         if away_selected:
             pygame.draw.rect(canvas, BRAND.sapphire_light, away_hit, 2, border_radius=20)
 
-        settings = [
-            ("DURACIÓN", f"{self.quick['minutes']} MIN"),
-            ("DIFICULTAD", self.quick["difficulty"]),
-            ("HORA", self.quick["time"]),
-            ("CLIMA", self.quick["weather"]),
-        ]
+        settings = [("DURACIÓN", f"{self.quick['minutes']} MIN"),
+                    ("DIFICULTAD", self.quick["difficulty"]),
+                    ("HORA", self.quick["time"]), ("CLIMA", self.quick["weather"])]
         x0, y, gap, w = 96, 720, 16, 420
         for offset, (label, value) in enumerate(settings):
             idx = 2 + offset
@@ -440,7 +439,7 @@ class App(BetaApp):
                 rounded_panel(canvas, rect, (11, 16, 26), (48, 57, 72), 16, 1, 228)
                 lc, vc = (121, 136, 156), (225, 230, 238)
             draw_text(canvas, label, self.f12, lc, (rect.x + 22, rect.y + 17))
-            draw_text(canvas, value, self.f16, vc, (rect.x + 22, rect.y + 49))
+            draw_text(canvas, value, self.f20, vc, (rect.x + 22, rect.y + 45))
             self.add_region(rect, "cursor", idx)
 
         if coop:
@@ -476,7 +475,6 @@ class App(BetaApp):
         status = "LISTO PARA JUGAR" if ready else "MOTOR PENDIENTE"
         status_color = (107, 218, 158) if ready else (244, 183, 77)
         draw_text(canvas, status, self.f30, status_color, (96, 360))
-
         y = 430
         for p in data.get("runtimes", [])[:3]:
             mods = p.get("modules") or {}
@@ -484,10 +482,8 @@ class App(BetaApp):
             rect = pygame.Rect(96, y, 1100, 116)
             rounded_panel(canvas, rect, (9, 14, 23), (45, 55, 71), 16, 1, 225)
             draw_text(canvas, f"PYTHON {p.get('version','—')}", self.f20, BRAND.white, (124, y + 22))
-            summary = "  ·  ".join(
-                f"{m.upper()} {'OK' if mods.get(m) else '—'}"
-                for m in ("pygame", "numpy", "absl", "gfootball_engine")
-            )
+            summary = "  ·  ".join(f"{m.upper()} {'OK' if mods.get(m) else '—'}"
+                                   for m in ("pygame", "numpy", "absl", "gfootball_engine"))
             draw_text(canvas, summary, self.f12,
                       (109, 213, 158) if engine else (154, 166, 184), (124, y + 68))
             y += 132
@@ -501,11 +497,9 @@ class App(BetaApp):
                           (242, 245, 249) if selected else (10, 15, 25),
                           (255, 255, 255) if selected else (48, 57, 72), 18, 1, 245)
             draw_text(canvas, title, self.f20,
-                      (18, 24, 36) if selected else BRAND.white,
-                      (rect.x + 28, rect.y + 24))
+                      (18, 24, 36) if selected else BRAND.white, (rect.x + 28, rect.y + 24))
             draw_text(canvas, subtitle, self.f12,
-                      BRAND.sapphire if selected else (127, 140, 160),
-                      (rect.x + 28, rect.y + 70))
+                      BRAND.sapphire if selected else (127, 140, 160), (rect.x + 28, rect.y + 70))
             self.add_region(rect, "cursor", i)
         draw_text(canvas, "Esta pantalla es técnica y no aparece como modo de juego.",
                   self.f12, (113, 126, 145), (96, 922))
@@ -524,8 +518,7 @@ class App(BetaApp):
         draw_text(canvas, "MATCH DAY", self._display_hero, BRAND.white,
                   (960, 150), "center", int(255 * fade))
 
-        left = pygame.Rect(140, 300, 720, 470)
-        right = pygame.Rect(1060, 300, 720, 470)
+        left, right = pygame.Rect(140, 300, 720, 470), pygame.Rect(1060, 300, 720, 470)
         for rect, team, name, color, align in (
             (left, home, home_name, home_color, "left"),
             (right, away, away_name, away_color, "right"),
@@ -549,9 +542,8 @@ class App(BetaApp):
                   (960, 512), "center", int(245 * fade))
         info = (f"{self.quick['minutes']} MIN   ·   {self.quick['difficulty']}   ·   "
                 f"{self.quick['time']}   ·   {self.quick['weather']}")
-        draw_text(canvas, info, self.f16, (151, 163, 182),
+        draw_text(canvas, info, self.f20, (171, 183, 201),
                   (960, 820), "center", int(245 * fade))
-
         button = pygame.Rect(660, 888, 600, 82)
         pulse = 0.88 + 0.12 * math.sin(t * 3.4) if self.motion() else 1.0
         rounded_panel(canvas, button, BRAND.sapphire, BRAND.sapphire_light, 18, 2, int(250 * fade))
