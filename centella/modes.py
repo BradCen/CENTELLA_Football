@@ -24,7 +24,6 @@ MODES: Dict[str, List[Mode]] = {
         Mode("master", "LIGA MÁSTER 2.0", "Dirige o preside", "Carrera de club con roles de DT, Presidente, control total o cooperación.", "BETA", route="career"),
         Mode("legend", "MODO LEYENDA", "Tu carrera, tu historia", "Carrera de jugador con decisiones, eventos, contratos e identidad propia.", "BETA", route="journey"),
         Mode("street", "STREET / FUTSAL", "Fútbol desde el barrio", "5v5, clubes creados, superficies, equipos mixtos y reglas configurables.", "BETA", route="street"),
-        Mode("lab", "CENTELLA LAB", "Rendimiento y motor", "Comprueba runtime, mando, render y estado del motor nativo.", "HERRAMIENTAS", route="doctor"),
     ],
     "PLAY": [
         Mode("kickoff", "PATADA INICIAL", "11 vs 11 local", "El flujo clásico y más corto hacia un partido completo.", "JUGABLE", route="quick_match"),
