@@ -42,12 +42,28 @@ jobs:
           print('IMPORTS OK')
           PY
 
+      - name: Validate bundled PNG assets
+        run: |
+          python - <<'PY'
+          import pathlib
+          import pygame
+          pygame.init()
+          pygame.display.set_mode((16, 16))
+          root = pathlib.Path('centella/assets')
+          for path in sorted(root.glob('*.png')):
+              image = pygame.image.load(str(path))
+              assert image.get_width() > 0 and image.get_height() > 0, path
+              print('PNG OK', path, image.get_size())
+          pygame.quit()
+          PY
+
       - name: Headless UI render smoke test
         run: |
           python - <<'PY'
           import pygame
           from centella.beta_frontend import App
           from centella.controller import InputAction
+          from centella.modes import MODES
 
           app = App()
           app.render()
@@ -55,17 +71,31 @@ jobs:
           assert app.scene == 'hub'
           app.render()
 
-          app.set_tab(1)
-          app.render()
-          app.open_mode(__import__('centella.modes', fromlist=['MODES']).MODES['PLAY'][0])
-          assert app.scene == 'quick'
-          app.render()
+          # Every main tab must render and expose real cards.
+          for tab_index in range(5):
+              app.set_tab(tab_index)
+              assert MODES[app.tab_name]
+              app.render()
 
-          app.enter('controls')
-          app.render()
-          app.enter('video')
-          app.render()
-          app.enter('doctor')
+          # Render every implemented product scene at least once.
+          scenes = [
+              'quick', 'coop', 'training', 'career', 'street', 'journey',
+              'online', 'edit', 'player', 'tournament', 'setpiece', 'controls',
+              'video', 'access', 'workshop', 'doctor', 'detail'
+          ]
+          for scene in scenes:
+              if scene == 'detail':
+                  app.detail_mode = MODES['PLAY'][5]
+              app.enter(scene)
+              app.render()
+              print('SCENE OK', scene)
+
+          # Basic navigation path back into a playable match setup.
+          app.set_tab(1)
+          app.open_mode(MODES['PLAY'][0])
+          assert app.scene == 'quick'
+          app.handle_action(InputAction('down'))
+          app.handle_action(InputAction('right'))
           app.render()
 
           pygame.quit()
