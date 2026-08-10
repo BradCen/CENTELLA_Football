@@ -45,7 +45,7 @@ function Test-PythonCode {
     try {
         $ErrorActionPreference = "Continue"
         & $Python -c $Code *> $null
-        $exitCode = $LASTEXITCODE
+        $exitCode = [int]$LASTEXITCODE
     }
     finally {
         $ErrorActionPreference = $previousPreference
@@ -58,22 +58,22 @@ function Invoke-PythonCommand {
 
     $previousPreference = $ErrorActionPreference
     try {
-        # Native tools are allowed to write warnings/progress to stderr. Their
-        # process exit code, not PowerShell's NativeCommandError wrapping, is
-        # the source of truth here.
+        # Route the native process output to the host instead of the PowerShell
+        # success pipeline. Otherwise assigning the function result also captures
+        # pip's text and turns an exit code such as 0 into an array/string.
         $ErrorActionPreference = "Continue"
-        & $Python @Arguments
-        $exitCode = $LASTEXITCODE
+        & $Python @Arguments 2>&1 | ForEach-Object { Write-Host $_ }
+        $exitCode = [int]$LASTEXITCODE
     }
     finally {
         $ErrorActionPreference = $previousPreference
     }
-    return $exitCode
+    return [int]$exitCode
 }
 
 if (-not (Test-PythonCode "import pip")) {
     Write-Host "Preparando pip para el shell..." -ForegroundColor Yellow
-    $ensurePipExit = Invoke-PythonCommand @("-m", "ensurepip", "--upgrade")
+    $ensurePipExit = [int](Invoke-PythonCommand @("-m", "ensurepip", "--upgrade"))
     if ($ensurePipExit -ne 0) {
         throw "Python existe, pero no pude preparar pip (exit $ensurePipExit)."
     }
@@ -81,7 +81,7 @@ if (-not (Test-PythonCode "import pip")) {
 
 if (-not (Test-PythonCode "import pygame; assert pygame.version.ver.startswith('2.6.')")) {
     Write-Host "pygame no está disponible en este Python. Instalando pygame 2.6.1 para el shell..." -ForegroundColor Yellow
-    $pygameInstallExit = Invoke-PythonCommand @("-m", "pip", "install", "pygame==2.6.1")
+    $pygameInstallExit = [int](Invoke-PythonCommand @("-m", "pip", "install", "pygame==2.6.1"))
     if ($pygameInstallExit -ne 0) {
         throw "No se pudo instalar pygame (exit $pygameInstallExit)."
     }
@@ -99,7 +99,7 @@ if ($CheckOnly) {
     exit 0
 }
 
-$runExit = Invoke-PythonCommand @("-m", "centella")
+$runExit = [int](Invoke-PythonCommand @("-m", "centella"))
 if ($runExit -ne 0) {
     Write-Host "`nEl shell terminó con error $runExit." -ForegroundColor Red
     exit $runExit
