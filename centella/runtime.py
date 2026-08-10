@@ -49,10 +49,28 @@ def _probe(exe: Path) -> RuntimeProbe:
     if not exe.exists():
         return RuntimeProbe(str(exe), False, modules={})
     code = r'''
-import importlib.util, json, sys
-mods = ["absl", "numpy", "cv2", "psutil", "pygame", "gfootball_engine"]
-result = {m: importlib.util.find_spec(m) is not None for m in mods}
-print(json.dumps({"version": sys.version.split()[0], "modules": result}))
+import importlib, json, sys, traceback
+mods = ["absl", "numpy", "cv2", "psutil", "pygame"]
+result = {}
+errors = []
+for name in mods:
+    try:
+        importlib.import_module(name)
+        result[name] = True
+    except Exception as exc:
+        result[name] = False
+        errors.append(f"{name}: {type(exc).__name__}: {exc}")
+engine = False
+try:
+    engine_module = importlib.import_module("gfootball_engine")
+    engine = hasattr(engine_module, "GameEnv") and hasattr(engine_module, "GameState")
+    result["gfootball_engine"] = engine
+    if not engine:
+        errors.append("gfootball_engine imported but native GameEnv/GameState are missing")
+except Exception as exc:
+    result["gfootball_engine"] = False
+    errors.append(f"gfootball_engine: {type(exc).__name__}: {exc}")
+print(json.dumps({"version": sys.version.split()[0], "modules": result, "engine": engine, "errors": errors}))
 '''
     try:
         p = subprocess.run(
@@ -60,15 +78,22 @@ print(json.dumps({"version": sys.version.split()[0], "modules": result}))
             cwd=str(PROJECT_ROOT),
             capture_output=True,
             text=True,
-            timeout=10,
+            timeout=15,
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
-        payload = json.loads((p.stdout or "{}").strip().splitlines()[-1])
+        lines = [line for line in (p.stdout or "").splitlines() if line.strip()]
+        if not lines:
+            raise RuntimeError((p.stderr or "runtime probe produced no output").strip())
+        payload = json.loads(lines[-1])
         modules = payload.get("modules", {})
+        errors = payload.get("errors", [])
+        stderr = (p.stderr or "").strip()
+        details = " | ".join(errors)
+        if stderr:
+            details = (details + " | " + stderr).strip(" |")
         return RuntimeProbe(
             str(exe), True, payload.get("version", ""), modules,
-            bool(modules.get("gfootball_engine")),
-            (p.stderr or "").strip() if p.returncode else "",
+            bool(payload.get("engine", False)), details,
         )
     except Exception as exc:
         return RuntimeProbe(str(exe), True, modules={}, error=str(exc))
@@ -79,8 +104,7 @@ def probes() -> List[RuntimeProbe]:
 
 
 def preferred_engine_python() -> Optional[Path]:
-    all_probes = probes()
-    for probe in all_probes:
+    for probe in probes():
         if probe.engine and probe.modules and all(
             probe.modules.get(m, False) for m in ("absl", "numpy", "pygame")
         ):
@@ -90,15 +114,11 @@ def preferred_engine_python() -> Optional[Path]:
 
 def runtime_summary() -> Dict:
     rows = probes()
-    ready = next(
-        (
-            True
-            for probe in rows
-            if probe.engine
-            and probe.modules
-            and all(probe.modules.get(m, False) for m in ("absl", "numpy", "pygame"))
-        ),
-        False,
+    ready = any(
+        probe.engine
+        and probe.modules
+        and all(probe.modules.get(m, False) for m in ("absl", "numpy", "pygame"))
+        for probe in rows
     )
     return {
         "project_root": str(PROJECT_ROOT),
@@ -115,6 +135,8 @@ def _player_spec(controller_count: int, local_players: int = 1, versus: bool = F
         return "keyboard:left_players=1"
     if local_players <= 1:
         return "gamepad:left_players=1"
+    if controller_count < 2:
+        return "gamepad:left_players=1"
     if versus:
         return "gamepad:left_players=1;gamepad:right_players=1"
     return "gamepad:left_players=1;gamepad:left_players=1"
@@ -130,6 +152,8 @@ def launch_match(
     engine_python = preferred_engine_python()
     if engine_python is None:
         return False, "MOTOR NO PREPARADO. ABRE CENTELLA LAB Y EJECUTA INSTALAR/REPARAR."
+    if local_players > 1 and controller_count < 2:
+        return False, "CO-OP LOCAL REQUIERE DOS MANDOS."
 
     player_spec = _player_spec(controller_count, local_players, versus)
     width = int(SETTINGS.get("display.width", 1600))
@@ -143,10 +167,10 @@ def launch_match(
         f"--players={player_spec}",
         "--action_set=full",
         "--render=True",
+        "--real_time=True",
         f"--render_resolution_x={render_width}",
+        f"--physics_steps_per_frame={5 if low_latency else 10}",
     ]
-    if low_latency:
-        cmd.append("--physics_steps_per_frame=5")
     if level:
         cmd.append(f"--level={level}")
 
