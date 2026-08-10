@@ -14,8 +14,8 @@
 
 """Script allowing humans to play Google Research Football.
 
-CENTELLA additions keep the original entry point compatible while exposing the
-render resolution and physics/action cadence to the product shell.
+CENTELLA additions keep the original entry point compatible while exposing
+product-facing render, cadence, duration and AI-difficulty controls.
 """
 
 from __future__ import absolute_import, division, print_function
@@ -40,6 +40,10 @@ flags.DEFINE_integer('render_resolution_x', 1280,
                      'Horizontal native render resolution. Height keeps 16:9.')
 flags.DEFINE_integer('physics_steps_per_frame', 10,
                      'Native physics steps grouped before the next environment action.')
+flags.DEFINE_integer('game_duration', 0,
+                     'Optional scenario duration override in environment ticks; 0 keeps scenario default.')
+flags.DEFINE_float('right_team_difficulty', -1.0,
+                   'Optional built-in AI difficulty override in [0, 1]; negative keeps scenario default.')
 
 
 def main(_):
@@ -56,6 +60,12 @@ def main(_):
   }
   if FLAGS.level:
     cfg_values['level'] = FLAGS.level
+  if FLAGS.game_duration > 0:
+    cfg_values['game_duration_override'] = int(FLAGS.game_duration)
+  if FLAGS.right_team_difficulty >= 0.0:
+    cfg_values['right_team_difficulty_override'] = max(
+        0.0, min(1.0, float(FLAGS.right_team_difficulty)))
+
   cfg = config.Config(cfg_values)
   env = football_env.FootballEnv(cfg)
   if FLAGS.render:
