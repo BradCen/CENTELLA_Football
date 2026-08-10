@@ -31,7 +31,7 @@ if (-not $Python) {
 
 Set-Location $ProjectRoot
 $env:PYGAME_HIDE_SUPPORT_PROMPT = "1"
-Write-Host "CENTELLA Football shell: $Python" -ForegroundColor Cyan
+Write-Host "CENTELLA Football: $Python" -ForegroundColor Cyan
 
 # Windows PowerShell 5.1 turns redirected stderr from native programs into
 # ErrorRecord objects. With ErrorActionPreference=Stop, a harmless probe such as
@@ -72,7 +72,7 @@ function Invoke-PythonCommand {
 }
 
 if (-not (Test-PythonCode "import pip")) {
-    Write-Host "Preparando pip para el shell..." -ForegroundColor Yellow
+    Write-Host "Preparando pip para CENTELLA Football..." -ForegroundColor Yellow
     $ensurePipExit = [int](Invoke-PythonCommand @("-m", "ensurepip", "--upgrade"))
     if ($ensurePipExit -ne 0) {
         throw "Python existe, pero no pude preparar pip (exit $ensurePipExit)."
@@ -80,19 +80,20 @@ if (-not (Test-PythonCode "import pip")) {
 }
 
 if (-not (Test-PythonCode "import pygame; assert pygame.version.ver.startswith('2.6.')")) {
-    Write-Host "pygame no está disponible en este Python. Instalando pygame 2.6.1 para el shell..." -ForegroundColor Yellow
+    Write-Host "pygame no está disponible en este Python. Instalando pygame 2.6.1..." -ForegroundColor Yellow
     $pygameInstallExit = [int](Invoke-PythonCommand @("-m", "pip", "install", "pygame==2.6.1"))
     if ($pygameInstallExit -ne 0) {
         throw "No se pudo instalar pygame (exit $pygameInstallExit)."
     }
 }
 
-if (-not (Test-PythonCode "import pygame; import centella.product_frontend; import centella.runtime")) {
-    throw "pygame quedó instalado, pero el shell CENTELLA no puede importarse. Revisa el traceback con: `"$Python`" -c `"import centella.product_frontend`""
+# Validate the actual public entry point, not the superseded v2/product shell.
+if (-not (Test-PythonCode "import pygame; import centella.cinematic_frontend; import centella.runtime")) {
+    throw "CENTELLA Football no puede importar su frontend cinematográfico. Revisa el traceback con: `"$Python`" -c `"import centella.cinematic_frontend`""
 }
 
 $pythonVersion = & $Python -c "import platform,sys; print(sys.version.split()[0] + ' ' + platform.architecture()[0])"
-Write-Host "Shell Python OK: $pythonVersion" -ForegroundColor Green
+Write-Host "CENTELLA Python OK: $pythonVersion" -ForegroundColor Green
 
 if ($CheckOnly) {
     Write-Host "CENTELLA LAUNCHER CHECK OK" -ForegroundColor Green
@@ -101,6 +102,6 @@ if ($CheckOnly) {
 
 $runExit = [int](Invoke-PythonCommand @("-m", "centella"))
 if ($runExit -ne 0) {
-    Write-Host "`nEl shell terminó con error $runExit." -ForegroundColor Red
+    Write-Host "`nCENTELLA Football terminó con error $runExit." -ForegroundColor Red
     exit $runExit
 }
