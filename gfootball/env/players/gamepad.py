@@ -56,10 +56,10 @@ def button_actions():
                            football_action_set.action_team_pressure],
       _button('high_pass', 2): [football_action_set.action_high_pass,
                                 football_action_set.action_sliding],
-      _button('through_pass', 3): [football_action_set.action_long_pass,
-                                   football_action_set.action_keeper_rush],
+      _button('long_pass', 3): [football_action_set.action_long_pass,
+                                football_action_set.action_keeper_rush],
       _button('switch_player', 4): [football_action_set.action_switch],
-      _button('teammate_press', 5): [football_action_set.action_dribble],
+      _button('dribble', 5): [football_action_set.action_dribble],
   }
 
 
@@ -96,7 +96,8 @@ class Player(controller_base.Controller):
       if event.type == pygame.JOYBUTTONDOWN:
         for action in mapping.get(event.button, []):
           active_buttons[action] = 1
-      if event.type == pygame.JOYAXISMOTION and event.axis == _axis('sprint', 5) and event.value > 0.15:
+      if (event.type == pygame.JOYAXISMOTION and
+          event.axis == _axis('sprint', 5) and event.value > 0.15):
         active_buttons[football_action_set.action_sprint] = 1
 
     for button, actions in mapping.items():
@@ -105,7 +106,8 @@ class Player(controller_base.Controller):
           active_buttons[action] = 1
 
     sprint_axis = _axis('sprint', 5)
-    if sprint_axis < self._joystick.get_numaxes() and self._joystick.get_axis(sprint_axis) > 0.15:
+    if (sprint_axis < self._joystick.get_numaxes() and
+        self._joystick.get_axis(sprint_axis) > 0.15):
       active_buttons[football_action_set.action_sprint] = 1
     return self.get_env_action(left, right, top, bottom, active_buttons)
 
