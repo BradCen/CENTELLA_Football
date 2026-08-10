@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  beta-shell:
+  beta-shell-linux:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
@@ -100,3 +100,56 @@ jobs:
           pygame.quit()
           print('UI SMOKE OK')
           PY
+
+  windows-launcher:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    env:
+      SDL_VIDEODRIVER: dummy
+      SDL_AUDIODRIVER: dummy
+      PYGAME_HIDE_SUPPORT_PROMPT: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.10 x64
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          architecture: "x64"
+
+      - name: Reproduce CENTELLA TOOLCHAIN layout
+        shell: powershell
+        run: |
+          $python = (Get-Command python).Source
+          $pythonRoot = Split-Path -Parent $python
+          $workspaceRoot = Split-Path -Parent $env:GITHUB_WORKSPACE
+          $toolchainRoot = Join-Path $workspaceRoot "TOOLCHAIN"
+          $pythonLink = Join-Path $toolchainRoot "Python310"
+          New-Item -ItemType Directory -Force $toolchainRoot | Out-Null
+          if (Test-Path $pythonLink) { Remove-Item $pythonLink -Recurse -Force }
+          New-Item -ItemType Junction -Path $pythonLink -Target $pythonRoot | Out-Null
+          Write-Host "TOOLCHAIN Python310 -> $pythonRoot"
+          & "$pythonLink\python.exe" --version
+
+      - name: Force the missing-pygame first-run case
+        shell: powershell
+        run: |
+          $workspaceRoot = Split-Path -Parent $env:GITHUB_WORKSPACE
+          $python = Join-Path $workspaceRoot "TOOLCHAIN\Python310\python.exe"
+          & $python -m pip uninstall -y pygame
+          & $python -c "import importlib.util; assert importlib.util.find_spec('pygame') is None; print('pygame intentionally absent')"
+
+      - name: Windows launcher self-heal check
+        shell: powershell
+        run: .\scripts\RUN_BETA.ps1 -CheckOnly
+
+      - name: Verify pygame was installed into TOOLCHAIN Python
+        shell: powershell
+        run: |
+          $workspaceRoot = Split-Path -Parent $env:GITHUB_WORKSPACE
+          $python = Join-Path $workspaceRoot "TOOLCHAIN\Python310\python.exe"
+          & $python -c "import pygame, centella.product_frontend, centella.runtime; print('WINDOWS TOOLCHAIN IMPORTS OK', pygame.version.ver)"
+
+      - name: Test the public BAT launcher wrapper
+        shell: cmd
+        run: RUN_CENTELLA_BETA.bat -CheckOnly
