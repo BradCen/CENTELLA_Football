@@ -1,0 +1,73 @@
+name: CENTELLA Beta Smoke
+
+on:
+  push:
+    branches:
+      - agent/centella-first-impression
+  workflow_dispatch:
+
+jobs:
+  beta-shell:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SDL_VIDEODRIVER: dummy
+      SDL_AUDIODRIVER: dummy
+      PYGAME_HIDE_SUPPORT_PROMPT: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install shell dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pygame==2.6.1
+
+      - name: Compile all CENTELLA Python modules
+        run: python -m compileall -q centella
+
+      - name: Import beta modules
+        run: |
+          python - <<'PY'
+          import centella.settings
+          import centella.content
+          import centella.controller
+          import centella.modes
+          import centella.runtime
+          import centella.ui
+          import centella.beta_frontend
+          print('IMPORTS OK')
+          PY
+
+      - name: Headless UI render smoke test
+        run: |
+          python - <<'PY'
+          import pygame
+          from centella.beta_frontend import App
+          from centella.controller import InputAction
+
+          app = App()
+          app.render()
+          app.handle_action(InputAction('confirm'))
+          assert app.scene == 'hub'
+          app.render()
+
+          app.set_tab(1)
+          app.render()
+          app.open_mode(__import__('centella.modes', fromlist=['MODES']).MODES['PLAY'][0])
+          assert app.scene == 'quick'
+          app.render()
+
+          app.enter('controls')
+          app.render()
+          app.enter('video')
+          app.render()
+          app.enter('doctor')
+          app.render()
+
+          pygame.quit()
+          print('UI SMOKE OK')
+          PY
