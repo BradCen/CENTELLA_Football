@@ -1,4 +1,4 @@
-from .product_frontend import main
+from .cinematic_frontend import main
 
 if __name__ == "__main__":
     main()
