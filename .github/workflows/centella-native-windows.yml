@@ -18,6 +18,7 @@ jobs:
     env:
       CMAKE_POLICY_VERSION_MINIMUM: '3.10'
       VCPKG_DISABLE_METRICS: '1'
+      VCPKG_FEATURE_FLAGS: 'versions'
       PIP_DISABLE_PIP_VERSION_CHECK: '1'
     steps:
       - uses: actions/checkout@v4
@@ -36,18 +37,22 @@ jobs:
           python -m pip install 'pip==23.2.1' 'setuptools==65.5.0' 'wheel==0.38.4' psutil
           python -c "import struct,sys; print(sys.version); print('bits', struct.calcsize('P')*8)"
 
-      - name: Prepare full vcpkg history
+      - name: Prepare reproducible vcpkg baseline
         shell: pwsh
         run: |
           $root = Join-Path $env:RUNNER_TEMP 'centella-vcpkg'
+          $baseline = 'e58f8d7c8b7bfc1f072c2e20c3d3a55222a2a39f'
           git clone https://github.com/microsoft/vcpkg.git $root
           if ($LASTEXITCODE -ne 0) { throw 'vcpkg clone failed' }
+          git -C $root checkout $baseline
+          if ($LASTEXITCODE -ne 0) { throw 'vcpkg baseline checkout failed' }
           & (Join-Path $root 'bootstrap-vcpkg.bat') -disableMetrics
           if ($LASTEXITCODE -ne 0) { throw 'vcpkg bootstrap failed' }
           "VCPKG_ROOT=$root" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
           $cache = Join-Path $env:RUNNER_TEMP 'centella-vcpkg-cache'
           New-Item -ItemType Directory -Force $cache | Out-Null
           "VCPKG_DEFAULT_BINARY_CACHE=$cache" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
+          & (Join-Path $root 'vcpkg.exe') version
 
       - name: Install Python runtime dependencies
         shell: pwsh
@@ -59,15 +64,34 @@ jobs:
         shell: pwsh
         run: |
           $PSNativeCommandUseErrorActionPreference = $false
-          python -m pip install -e . --no-build-isolation --no-deps -v
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $buildLog = Join-Path $env:RUNNER_TEMP 'centella-native-build.txt'
+          python -m pip install -e . --no-build-isolation --no-deps -v 2>&1 | Tee-Object -FilePath $buildLog
+          $exitCode = $LASTEXITCODE
+          if ($exitCode -ne 0) {
+            Write-Host "Native build failed with exit code $exitCode. Full pip output is preserved in the workflow artifact."
+            exit $exitCode
+          }
 
       - name: Verify native module
         shell: pwsh
         run: |
-          python - <<'PY'
-          PY
-        continue-on-error: true
+          @'
+          import importlib.util
+          import pathlib
+          import sys
+
+          spec = importlib.util.find_spec('gfootball_engine')
+          print('gfootball_engine spec:', spec)
+          if spec is None:
+              raise SystemExit('gfootball_engine module was not installed')
+          root = pathlib.Path(spec.origin).resolve().parent
+          native = sorted(root.glob('_gameplayfootball*.pyd'))
+          print('native modules:', [p.name for p in native])
+          if not native:
+              raise SystemExit('native _gameplayfootball .pyd was not produced')
+          print('python:', sys.version)
+          print('NATIVE MODULE PRESENT')
+          '@ | python -
 
       - name: Verify engine API
         shell: pwsh
@@ -108,6 +132,8 @@ jobs:
         run: |
           $out = Join-Path $env:RUNNER_TEMP 'centella-native-logs'
           New-Item -ItemType Directory -Force $out | Out-Null
+          $pipLog = Join-Path $env:RUNNER_TEMP 'centella-native-build.txt'
+          if (Test-Path $pipLog) { Copy-Item $pipLog (Join-Path $out 'pip-native-build.txt') -Force }
           $manifest = 'third_party\gfootball_engine\build_win\vcpkg-manifest-install.log'
           if (Test-Path $manifest) { Copy-Item $manifest (Join-Path $out 'vcpkg-manifest-install.log') -Force }
           if ($env:VCPKG_ROOT -and (Test-Path (Join-Path $env:VCPKG_ROOT 'buildtrees'))) {
