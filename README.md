@@ -1,191 +1,106 @@
-# Google Research Football
+# CENTELLA Football
 
-This repository contains an RL environment based on open-source game Gameplay
-Football. <br> It was created by the Google Brain team for research purposes.
+**Alpha 0.1 — a modern, responsive football game built on the open Gameplay Football / Google Research Football foundation.**
 
-Useful links:
+CENTELLA Football is not a PES, FIFA or eFootball mod. The long-term goal is an original commercial football platform with immediate controls, believable physicality, deep offline modes, fair manual-first defending, scalable graphics, online play and community-created content.
 
-* [Run in Colab](https://colab.research.google.com/github/google-research/football/blob/master/gfootball/colabs/gfootball_example_from_prebuild.ipynb) - start training in less that 2 minutes.
-* [Google Research Football Paper](https://arxiv.org/abs/1907.11180)
-* [GoogleAI blog post](https://ai.googleblog.com/2019/06/introducing-google-research-football.html)
-* [Google Research Football on Cloud](https://towardsdatascience.com/reproducing-google-research-football-rl-results-ac75cf17190e)
-* [GRF Kaggle competition](https://www.kaggle.com/c/google-football) - take part in the competition playing games against others, win prizes and become the GRF Champion!
+> **North star:** immediate to command, physical after the command.
 
+Responsiveness must not mean pinball football. Realism must not mean animation lock, delayed passes or arbitrary mistakes.
 
-We'd like to thank Bastiaan Konings Schuiling, who authored and open-sourced the original version of this game.
+## First product layer
 
+The repository now contains an early CENTELLA shell above the inherited simulation engine:
 
-## Quick Start
+- cinematic CENTELLA startup and **Press any button** flow;
+- controller/keyboard/mouse-ready home interface;
+- **Quick Match** connected to the existing 11v11 engine;
+- **Training** connected to the existing pass-and-shoot academy scenario;
+- honest placeholders for Career, Online, Club and Settings instead of fake finished features;
+- CENTELLA brand tokens and official logo artwork;
+- measurable gameplay-response targets;
+- design and clean-room reference documentation.
 
-### In colab
+Launch the CENTELLA shell after installing the project dependencies:
 
-Open our example [Colab](https://colab.research.google.com/github/google-research/football/blob/master/gfootball/colabs/gfootball_example_from_prebuild.ipynb), that will allow you to start training your model in less than 2 minutes.
-
-This method doesn't support game rendering on screen - if you want to see the game running, please use the method below.
-
-### Using Docker
-
-This is the recommended way for Linux-based systems to avoid incompatible package versions.
-Instructions are available [here](gfootball/doc/docker.md).
-
-### On your computer
-
-#### 1. Install required packages
-#### Linux
-```shell
-sudo apt-get install git cmake build-essential libgl1-mesa-dev libsdl2-dev \
-libsdl2-image-dev libsdl2-ttf-dev libsdl2-gfx-dev libboost-all-dev \
-libdirectfb-dev libst-dev mesa-utils xvfb x11vnc python3-pip
-
-python3 -m pip install --upgrade pip setuptools psutil wheel
+```bash
+python -m centella
 ```
 
-#### macOS
-First install [brew](https://brew.sh/). It should automatically install Command Line Tools.
-Next install required packages:
+The inherited research-game entry point remains available:
 
-```shell
-brew install git python3 cmake sdl2 sdl2_image sdl2_ttf sdl2_gfx boost boost-python3
-
-python3 -m pip install --upgrade pip setuptools psutil wheel
+```bash
+python -m gfootball.play_game --action_set=full
 ```
 
+## Why this foundation is valuable
 
-#### Windows
-Install [Git](https://git-scm.com/download/win) and [Python 3](https://www.python.org/downloads/).
-Update pip in the Command Line (here and for the **next steps** type `python` instead of `python3`)
-```commandline
-python -m pip install --upgrade pip setuptools psutil wheel
+Google Research Football is an RL environment built on the open-source Gameplay Football game. This repository includes the C++ simulation source for the ball, players, human controller, AI, match rules, animation system and rendering pipeline rather than treating football as a black box.
+
+That gives CENTELLA something unusually useful: we can change the actual football behavior and automatically test it with agents. The inherited human-play path does, however, have a known research-oriented limitation: human actions are reported to the environment at a coarse 100 ms cadence. Removing that bottleneck for local play is one of the first core-engine milestones.
+
+## Gameplay direction
+
+Read [`docs/GAMEPLAY_DNA.md`](docs/GAMEPLAY_DNA.md). It converts lessons from PES 6/2013/2018/2019/2021 and FIFA 14/17/19/22 into original CENTELLA rules instead of copying another game's implementation.
+
+The short version:
+
+- input intent is sacred;
+- the ball remains physically independent;
+- animation serves the requested football action;
+- mistakes require an understandable football reason;
+- defense is primarily manual;
+- players must feel individual;
+- difficulty improves intelligence rather than cheating;
+- tactics and match state should produce emergent stories.
+
+Current response targets live in [`centella/gameplay_profile.py`](centella/gameplay_profile.py).
+
+## First-impression UX
+
+The product shell is intentionally modern rather than retro/arcade. It uses CENTELLA's technology identity:
+
+- Jet Black `#020203`
+- Obsidian Black `#171717`
+- Sapphire Blue `#2359AA`
+- Pure White `#FFFFFF`
+- Urbanist when available on the host OS, with system sans-serif fallbacks
+
+The startup uses restrained stadium light, perspective pitch geometry and CENTELLA motion rather than pixels, CRT effects or copied FIFA screens. See [`docs/FIRST_IMPRESSION_UX.md`](docs/FIRST_IMPRESSION_UX.md).
+
+## Architecture
+
+```text
+centella/                       Product/UI layer
+  frontend.py                   Splash, home, navigation, game launch
+  brand.py                      CENTELLA design tokens
+  gameplay_profile.py           Measurable feel targets
+  assets/                       Approved CENTELLA artwork
+
+gfootball/                     Google Research Football Python environment
+third_party/gfootball_engine/  Gameplay Football C++ engine
+  src/onthepitch/ball.cpp       Ball simulation
+  src/onthepitch/match.cpp      Match simulation
+  src/onthepitch/player/        Player/controller/animation behavior
+
+docs/                           Product, gameplay and clean-room specs
 ```
 
+## Development priorities
 
-#### 2. Install GFootball
-#### Option a. From PyPi package (recommended)
-```shell
-python3 -m pip install gfootball
-```
+1. Instrument input-to-visible-response latency, then decouple local human input from the RL environment cadence.
+2. Build an intent-first pass/movement/shot pipeline and tune unexplained unforced errors out of elite players.
+3. Rework manual defending, jockeying, player switching and maximum-difficulty AI without hidden physical boosts.
+4. Modernize locomotion/IK/animation blending while retaining a low-cost rendering path for integrated graphics.
+5. Replace inherited research presentation with native CENTELLA team select, match intro, pause/tactics and settings screens.
+6. Add persistent Career/Player Journey data, true futsal rules, online architecture and a controlled community workshop.
 
-#### Option b. Installing from sources using GitHub repository 
-(On Windows you have to install additional tools and set an environment variable, see 
-[Compiling Engine](gfootball/doc/compile_engine.md#windows) for detailed instructions.)
+## Legal / provenance
 
-```shell
-git clone https://github.com/google-research/football.git
-cd football
-```
+CENTELLA Football studies **observable football-game behavior**, not proprietary PES/FIFA implementation code or assets. See [`docs/CLEAN_ROOM_REFERENCE_POLICY.md`](docs/CLEAN_ROOM_REFERENCE_POLICY.md).
 
-Optionally you can use [virtual environment](https://docs.python.org/3/tutorial/venv.html):
+The Google Research Football project code is distributed under Apache 2.0; the included original Gameplay Football engine also carries its upstream public-domain/Unlicense notice. Existing copyright, license and attribution notices must remain intact. Every new external asset must have recorded provenance before a commercial release.
 
-```shell
-python3 -m venv football-env
-source football-env/bin/activate
-```
+---
 
-Next, build the game engine and install dependencies:
-
-```shell
-python3 -m pip install .
-```
-This command can run for a couple of minutes, as it compiles the C++ environment in the background.
-If you face any problems, first check [Compiling Engine](gfootball/doc/compile_engine.md) documentation and search GitHub issues.
-
-
-#### 3. Time to play!
-```shell
-python3 -m gfootball.play_game --action_set=full
-```
-Make sure to check out the [keyboard mappings](#keyboard-mappings).
-To quit the game press Ctrl+C in the terminal.
-
-# Contents #
-
-* [Running training](#training-agents-to-play-GRF)
-* [Playing the game](#playing-the-game)
-    * [Keyboard mappings](#keyboard-mappings)
-    * [Play vs built-in AI](#play-vs-built-in-AI)
-    * [Play vs pre-trained agent](#play-vs-pre-trained-agent)
-    * [Trained checkpoints](#trained-checkpoints)
-* [Environment API](gfootball/doc/api.md)
-* [Observations & Actions](gfootball/doc/observation.md)
-* [Scenarios](gfootball/doc/scenarios.md)
-* [Multi-agent support](gfootball/doc/multi_agent.md)
-* [Running in docker](gfootball/doc/docker.md)
-* [Saving replays, logs, traces](gfootball/doc/saving_replays.md)
-* [Imitation Learning](gfootball/doc/imitation.md)
-
-## Training agents to play GRF
-
-### Run training
-In order to run TF training, you need to install additional dependencies
-
-- Update PIP, so that tensorflow 1.15 is available: `python3 -m pip install --upgrade pip setuptools wheel`
-- TensorFlow: `python3 -m pip install tensorflow==1.15.*` or
-  `python3 -m pip install tensorflow-gpu==1.15.*`, depending on whether you want CPU or
-  GPU version;
-- Sonnet and psutil: `python3 -m pip install dm-sonnet==1.* psutil`;
-- OpenAI Baselines:
-  `python3 -m pip install git+https://github.com/openai/baselines.git@master`.
-
-Then:
-
-- To run example PPO experiment on `academy_empty_goal` scenario, run
-  `python3 -m gfootball.examples.run_ppo2 --level=academy_empty_goal_close`
-- To run on `academy_pass_and_shoot_with_keeper` scenario, run
-  `python3 -m gfootball.examples.run_ppo2 --level=academy_pass_and_shoot_with_keeper`
-
-In order to train with nice replays being saved, run
-`python3 -m gfootball.examples.run_ppo2 --dump_full_episodes=True --render=True`
-
-In order to reproduce PPO results from the paper, please refer to:
-
-- gfootball/examples/repro_checkpoint_easy.sh
-- gfootball/examples/repro_scoring_easy.sh
-
-## Playing the game
-
-Please note that playing the game is implemented through an environment, so human-controlled players use the same interface as the agents.
-One important implication is that there is a single action per 100 ms reported to the environment, which might cause a lag effect when playing.
-
-
-### Keyboard mappings
-The game defines following keyboard mapping (for the `keyboard` player type):
-
-* `ARROW UP` - run to the top.
-* `ARROW DOWN` - run to the bottom.
-* `ARROW LEFT` - run to the left.
-* `ARROW RIGHT` - run to the right.
-* `S` - short pass in the attack mode, pressure in the defense mode.
-* `A` - high pass in the attack mode, sliding in the defense mode.
-* `D` - shot in the attack mode, team pressure in the defense mode.
-* `W` - long pass in the attack mode, goalkeeper pressure in the defense mode.
-* `Q` - switch the active player in the defense mode.
-* `C` - dribble in the attack mode.
-* `E` - sprint.
-
-### Play vs built-in AI
-Run `python3 -m gfootball.play_game --action_set=full`. By default, it starts
-the base scenario and the left player is controlled by the keyboard. Different
-types of players are supported (gamepad, external bots, agents...). For possible
-options run `python3 -m gfootball.play_game -helpfull`.
-
-### Play vs pre-trained agent
-
-In particular, one can play against agent trained with `run_ppo2` script with
-the following command (notice no action_set flag, as PPO agent uses default
-action set):
-`python3 -m gfootball.play_game --players "keyboard:left_players=1;ppo2_cnn:right_players=1,checkpoint=$YOUR_PATH"`
-
-### Trained checkpoints
-We provide trained PPO checkpoints for the following scenarios:
-
-  - [11_vs_11_easy_stochastic](https://storage.googleapis.com/gfootball-public-bucket/trained_model_11_vs_11_easy_stochastic),
-  - [academy_run_to_score_with_keeper](https://storage.googleapis.com/gfootball-public-bucket/trained_model_academy_run_to_score_with_keeper_v2).
-
-In order to see the checkpoints playing, run
-`python3 -m gfootball.play_game --players "ppo2_cnn:left_players=1,policy=gfootball_impala_cnn,checkpoint=$CHECKPOINT" --level=$LEVEL`,
-where `$CHECKPOINT` is the path to downloaded checkpoint. Please note that the checkpoints were trained with Tensorflow 1.15 version. Using 
-different Tensorflow version may result in errors. The easiest way to run these checkpoints is through provided `Dockerfile_examples` image.
-See [running in docker](gfootball/doc/docker.md) for details (just override the default Docker definition with `-f Dockerfile_examples` parameter).
-
-In order to train against a checkpoint, you can pass 'extra_players' argument to create_environment function.
-For example extra_players='ppo2_cnn:right_players=1,policy=gfootball_impala_cnn,checkpoint=$CHECKPOINT'.
+**CENTELLA Football — the football should respond to the player, not fight the controller.**
