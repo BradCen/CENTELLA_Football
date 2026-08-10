@@ -24,7 +24,7 @@ foreach ($candidate in $candidates) {
 if (-not $Python) {
     $pythonCommand = Get-Command python -ErrorAction SilentlyContinue
     if (-not $pythonCommand) {
-        throw "No encontré Python. Ejecuta scripts\INSTALL_BETA.ps1 o restaura TOOLCHAIN\Python310."
+        throw "No encontré Python. Restaura TOOLCHAIN\Python310 antes de continuar."
     }
     $Python = $pythonCommand.Source
 }
@@ -33,11 +33,6 @@ Set-Location $ProjectRoot
 $env:PYGAME_HIDE_SUPPORT_PROMPT = "1"
 Write-Host "CENTELLA Football: $Python" -ForegroundColor Cyan
 
-# Windows PowerShell 5.1 turns redirected stderr from native programs into
-# ErrorRecord objects. With ErrorActionPreference=Stop, a harmless probe such as
-# `python -c 'import pygame'` used to terminate the launcher before we could read
-# LASTEXITCODE and install the missing package. Keep probes isolated from that
-# PowerShell behaviour and decide exclusively from the native exit code.
 function Test-PythonCode {
     param([Parameter(Mandatory = $true)][string]$Code)
 
@@ -58,9 +53,6 @@ function Invoke-PythonCommand {
 
     $previousPreference = $ErrorActionPreference
     try {
-        # Route the native process output to the host instead of the PowerShell
-        # success pipeline. Otherwise assigning the function result also captures
-        # pip's text and turns an exit code such as 0 into an array/string.
         $ErrorActionPreference = "Continue"
         & $Python @Arguments 2>&1 | ForEach-Object { Write-Host $_ }
         $exitCode = [int]$LASTEXITCODE
@@ -79,24 +71,46 @@ if (-not (Test-PythonCode "import pip")) {
     }
 }
 
+# Pygame remains installed only because the recovery frontend and parts of the
+# GRF runtime still import it. It is no longer the public menu renderer.
 if (-not (Test-PythonCode "import pygame; assert pygame.version.ver.startswith('2.6.')")) {
-    Write-Host "pygame no está disponible en este Python. Instalando pygame 2.6.1..." -ForegroundColor Yellow
+    Write-Host "Preparando dependencia de compatibilidad pygame 2.6.1..." -ForegroundColor Yellow
     $pygameInstallExit = [int](Invoke-PythonCommand @("-m", "pip", "install", "pygame==2.6.1"))
     if ($pygameInstallExit -ne 0) {
         throw "No se pudo instalar pygame (exit $pygameInstallExit)."
     }
 }
 
-# Validate the actual public entry point, not the superseded v2/product shell.
-if (-not (Test-PythonCode "import pygame; import centella.cinematic_frontend; import centella.runtime")) {
-    throw "CENTELLA Football no puede importar su frontend cinematográfico. Revisa el traceback con: `"$Python`" -c `"import centella.cinematic_frontend`""
+# CENTELLA now renders its shipping menu with HTML/CSS/JS inside a native
+# Windows WebView. pywebview uses Edge WebView2 when available.
+if (-not (Test-PythonCode "import webview; assert hasattr(webview, 'create_window')")) {
+    Write-Host "Preparando interfaz nativa WebView2 de CENTELLA..." -ForegroundColor Yellow
+    $webviewInstallExit = [int](Invoke-PythonCommand @("-m", "pip", "install", "pywebview>=5,<7"))
+    if ($webviewInstallExit -ne 0) {
+        Write-Host "No se pudo preparar pywebview; se conservará el frontend de recuperación." -ForegroundColor Yellow
+    }
+}
+
+if (-not (Test-PythonCode "import centella.web_frontend; import centella.release_frontend; import centella.runtime")) {
+    throw "CENTELLA Football no puede importar sus frontends/runtime. Revisa el traceback con: `"$Python`" -c `"import centella.web_frontend; import centella.runtime`""
 }
 
 $pythonVersion = & $Python -c "import platform,sys; print(sys.version.split()[0] + ' ' + platform.architecture()[0])"
 Write-Host "CENTELLA Python OK: $pythonVersion" -ForegroundColor Green
 
+$EngineReady = Test-PythonCode "import sys; from centella.runtime import runtime_summary; sys.exit(0 if runtime_summary().get('ready') else 7)"
+if ($EngineReady) {
+    Write-Host "CENTELLA ENGINE: READY" -ForegroundColor Green
+}
+else {
+    Write-Host "CENTELLA ENGINE: NOT READY (gfootball_engine nativo no está disponible)" -ForegroundColor Yellow
+}
+
 if ($CheckOnly) {
     Write-Host "CENTELLA LAUNCHER CHECK OK" -ForegroundColor Green
+    if (-not $EngineReady) {
+        Write-Host "NOTA: el menú puede abrir, pero JUGAR permanecerá bloqueado hasta que el motor nativo compile correctamente." -ForegroundColor Yellow
+    }
     exit 0
 }
 
