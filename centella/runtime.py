@@ -49,7 +49,7 @@ def _probe(exe: Path) -> RuntimeProbe:
     if not exe.exists():
         return RuntimeProbe(str(exe), False, modules={})
     code = r'''
-import importlib, json, sys, traceback
+import importlib, json, sys
 mods = ["absl", "numpy", "cv2", "psutil", "pygame"]
 result = {}
 errors = []
@@ -142,6 +142,15 @@ def _player_spec(controller_count: int, local_players: int = 1, versus: bool = F
     return "gamepad:left_players=1;gamepad:left_players=1"
 
 
+def _difficulty_value(name: str) -> float:
+    return {
+        "AMATEUR": 0.12,
+        "PROFESSIONAL": 0.60,
+        "TOP PLAYER": 0.82,
+        "LEGEND": 0.95,
+    }.get(str(name).upper(), 0.60)
+
+
 def launch_match(
     *,
     level: str = "",
@@ -160,6 +169,7 @@ def launch_match(
     render_scale = float(SETTINGS.get("display.render_scale", 0.75))
     render_width = max(640, int(width * render_scale))
     low_latency = bool(SETTINGS.get("gameplay.low_latency_experimental", False))
+    physics_steps = 5 if low_latency else 10
 
     cmd = [
         str(engine_python),
@@ -169,10 +179,26 @@ def launch_match(
         "--render=True",
         "--real_time=True",
         f"--render_resolution_x={render_width}",
-        f"--physics_steps_per_frame={5 if low_latency else 10}",
+        f"--physics_steps_per_frame={physics_steps}",
     ]
+
     if level:
+        # Academy/training scenarios keep their authored duration/difficulty.
         cmd.append(f"--level={level}")
+    else:
+        match_minutes = max(1, int(SETTINGS.get("gameplay.match_minutes", 10)))
+        difficulty = _difficulty_value(SETTINGS.get("gameplay.difficulty", "PROFESSIONAL"))
+        # Upstream human play reports one action every 100 ms with the default
+        # 10 physics steps. Compensate the duration when the experimental 5-step
+        # cadence is selected so real wall-clock match length stays comparable.
+        duration_ticks = match_minutes * 60 * 10
+        if physics_steps != 10:
+            duration_ticks = int(duration_ticks * (10.0 / physics_steps))
+        cmd.extend([
+            "--level=11_vs_11_stochastic",
+            f"--game_duration={duration_ticks}",
+            f"--right_team_difficulty={difficulty:.3f}",
+        ])
 
     env = os.environ.copy()
     env["CENTELLA_FOOTBALL"] = "1"
