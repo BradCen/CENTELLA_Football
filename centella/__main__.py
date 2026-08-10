@@ -1,4 +1,4 @@
-from .cinematic_frontend import main
+from .release_frontend import main
 
 if __name__ == "__main__":
     main()
