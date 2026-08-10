@@ -1,4 +1,4 @@
-from .frontend import main
+from .beta_frontend import main
 
 if __name__ == "__main__":
     main()
