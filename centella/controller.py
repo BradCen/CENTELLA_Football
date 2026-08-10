@@ -21,7 +21,7 @@ class ControllerManager:
 
     SDL/Pygame normalizes many Xbox/PlayStation compatible controllers to the
     familiar A/B/X/Y logical order. The mapping remains user-editable and is
-    also consumed by the GRF `gamepad.py` player implementation.
+    also consumed by the GRF ``gamepad.py`` player implementation.
     """
 
     def __init__(self) -> None:
@@ -99,7 +99,7 @@ class ControllerManager:
         if kb:
             return kb
 
-        if event.type == pygame.JOYDEVICEADDED or event.type == pygame.JOYDEVICEREMOVED:
+        if event.type in (pygame.JOYDEVICEADDED, pygame.JOYDEVICEREMOVED):
             self.refresh()
             return InputAction("device_changed", source="controller")
 
@@ -110,6 +110,8 @@ class ControllerManager:
                 return InputAction("confirm", source="controller")
             if button == int(mapping.get("back", 1)):
                 return InputAction("back", source="controller")
+            # Shoulder buttons are deliberately fixed for global navigation;
+            # match actions mapped to them remain configurable independently.
             if button == 4:
                 return InputAction("tab_left", source="controller")
             if button == 5:
@@ -159,9 +161,9 @@ class ControllerManager:
 GAMEPLAY_ACTION_LABELS = [
     ("short_pass", "PASE CORTO / PRESIÓN"),
     ("shot", "TIRO / PRESIÓN DE EQUIPO"),
-    ("high_pass", "CENTRO / ENTRADA"),
-    ("through_pass", "PASE AL HUECO / PORTERO"),
+    ("high_pass", "CENTRO ALTO / ENTRADA"),
+    ("long_pass", "PASE LARGO / SALIDA DE PORTERO"),
     ("switch_player", "CAMBIAR JUGADOR"),
-    ("teammate_press", "CONTROL ESPECIAL"),
-    ("pause", "PAUSA"),
+    ("dribble", "DRIBBLE / CONTROL ESPECIAL"),
+    ("pause", "PAUSA / OPCIONES"),
 ]
