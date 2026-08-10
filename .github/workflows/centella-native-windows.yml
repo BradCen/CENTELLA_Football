@@ -1,0 +1,129 @@
+name: CENTELLA Native Windows
+
+on:
+  push:
+    branches:
+      - agent/centella-first-impression
+    paths:
+      - 'setup.py'
+      - 'gfootball/**'
+      - 'third_party/gfootball_engine/**'
+      - '.github/workflows/centella-native-windows.yml'
+  workflow_dispatch:
+
+jobs:
+  native-engine:
+    runs-on: windows-2022
+    timeout-minutes: 120
+    env:
+      CMAKE_POLICY_VERSION_MINIMUM: '3.10'
+      VCPKG_DISABLE_METRICS: '1'
+      PIP_DISABLE_PIP_VERSION_CHECK: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Python 3.10 x64
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10.11'
+          architecture: 'x64'
+
+      - name: Prepare packaging runtime
+        shell: pwsh
+        run: |
+          python -m pip install 'pip==23.2.1' 'setuptools==65.5.0' 'wheel==0.38.4' psutil
+          python -c "import struct,sys; print(sys.version); print('bits', struct.calcsize('P')*8)"
+
+      - name: Prepare full vcpkg history
+        shell: pwsh
+        run: |
+          $root = Join-Path $env:RUNNER_TEMP 'centella-vcpkg'
+          git clone https://github.com/microsoft/vcpkg.git $root
+          if ($LASTEXITCODE -ne 0) { throw 'vcpkg clone failed' }
+          & (Join-Path $root 'bootstrap-vcpkg.bat') -disableMetrics
+          if ($LASTEXITCODE -ne 0) { throw 'vcpkg bootstrap failed' }
+          "VCPKG_ROOT=$root" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
+          $cache = Join-Path $env:RUNNER_TEMP 'centella-vcpkg-cache'
+          New-Item -ItemType Directory -Force $cache | Out-Null
+          "VCPKG_DEFAULT_BINARY_CACHE=$cache" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Install Python runtime dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --no-build-isolation 'gym==0.21.0'
+          python -m pip install 'numpy==1.26.4' 'absl-py<3,>=1.4' 'opencv-python==4.10.0.84' 'six<2,>=1.16' pygame==2.6.1
+
+      - name: Build Gameplay Football engine
+        shell: pwsh
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $false
+          python -m pip install -e . --no-build-isolation --no-deps -v
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Verify native module
+        shell: pwsh
+        run: |
+          python - <<'PY'
+          PY
+        continue-on-error: true
+
+      - name: Verify engine API
+        shell: pwsh
+        run: |
+          @'
+          import struct
+          import gfootball
+          import gfootball_engine
+          print('gfootball:', gfootball.__file__)
+          print('gfootball_engine:', gfootball_engine.__file__)
+          print('64bit:', struct.calcsize('P') * 8)
+          assert hasattr(gfootball_engine, 'GameEnv')
+          assert hasattr(gfootball_engine, 'GameState')
+          print('NATIVE ENGINE API OK')
+          '@ | python -
+
+      - name: Smoke scenario construction
+        shell: pwsh
+        run: |
+          @'
+          from gfootball.env import config, football_env
+          cfg = config.Config({
+              'level': 'academy_empty_goal_close',
+              'players': ['agent:left_players=1'],
+              'render': False,
+              'real_time': False,
+          })
+          env = football_env.FootballEnv(cfg)
+          obs = env.reset()
+          print('RESET OK', type(obs))
+          env.close()
+          print('SCENARIO SMOKE OK')
+          '@ | python -
+
+      - name: Collect native build logs
+        if: always()
+        shell: pwsh
+        run: |
+          $out = Join-Path $env:RUNNER_TEMP 'centella-native-logs'
+          New-Item -ItemType Directory -Force $out | Out-Null
+          $manifest = 'third_party\gfootball_engine\build_win\vcpkg-manifest-install.log'
+          if (Test-Path $manifest) { Copy-Item $manifest (Join-Path $out 'vcpkg-manifest-install.log') -Force }
+          if ($env:VCPKG_ROOT -and (Test-Path (Join-Path $env:VCPKG_ROOT 'buildtrees'))) {
+            Get-ChildItem (Join-Path $env:VCPKG_ROOT 'buildtrees') -Recurse -File -ErrorAction SilentlyContinue |
+              Where-Object { $_.Name -match '(out|err)\.log$' } |
+              ForEach-Object {
+                $safe = ($_.FullName.Substring($env:VCPKG_ROOT.Length).TrimStart('\') -replace '[\\/:*?"<>|]', '_')
+                Copy-Item $_.FullName (Join-Path $out $safe) -Force -ErrorAction SilentlyContinue
+              }
+          }
+
+      - name: Upload native logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: centella-native-windows-logs
+          path: ${{ runner.temp }}/centella-native-logs
+          if-no-files-found: ignore
+          retention-days: 7
