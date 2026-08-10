@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CENTELLA Football</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main class="shell">
+    <div class="atmosphere" aria-hidden="true">
+      <div class="stadium-glow stadium-glow--left"></div>
+      <div class="stadium-glow stadium-glow--right"></div>
+      <div class="pitch-lines"></div>
+      <div class="grain"></div>
+    </div>
+
+    <header class="topbar">
+      <a class="brand" href="#" aria-label="CENTELLA Football">
+        <span class="brand-mark">ϟ</span>
+        <span class="brand-copy"><strong>CENTELLA</strong><small>FOOTBALL</small></span>
+      </a>
+      <nav class="nav" aria-label="Navegación principal">
+        <button class="nav-item active" data-view="home">JUGAR</button>
+        <button class="nav-item" data-view="kickoff">PARTIDO RÁPIDO</button>
+        <button class="nav-item" data-view="training">ENTRENAMIENTO</button>
+      </nav>
+      <div class="top-actions">
+        <span id="engineDot" class="engine-dot" title="Estado del motor"></span>
+        <button id="fullscreenButton" class="icon-button" title="Pantalla completa">⛶</button>
+        <button id="closeButton" class="icon-button close" title="Cerrar">×</button>
+      </div>
+    </header>
+
+    <section id="home" class="view active-view">
+      <div class="hero-copy">
+        <p class="eyebrow"><span></span> CENTELLA MATCHDAY</p>
+        <h1>EL PARTIDO<br><em>EMPIEZA AQUÍ.</em></h1>
+        <p class="lead">Fútbol directo. Sin paneles de laboratorio, sin menús de desarrollador. Elige, entra y juega.</p>
+        <div class="hero-actions">
+          <button class="primary-cta" data-go="kickoff"><span>JUGAR AHORA</span><b>→</b></button>
+          <button class="ghost-cta" data-go="training">ENTRENAR</button>
+        </div>
+      </div>
+
+      <div class="hero-visual" aria-hidden="true">
+        <div class="ball-orbit orbit-one"></div>
+        <div class="ball-orbit orbit-two"></div>
+        <div class="player-silhouette">
+          <div class="player-head"></div>
+          <div class="player-torso"></div>
+          <div class="player-arm arm-left"></div>
+          <div class="player-arm arm-right"></div>
+          <div class="player-leg leg-left"></div>
+          <div class="player-leg leg-right"></div>
+        </div>
+        <div class="football"><i></i><i></i><i></i><i></i><i></i></div>
+        <div class="speed-line l1"></div><div class="speed-line l2"></div><div class="speed-line l3"></div>
+      </div>
+
+      <aside class="match-card">
+        <div class="card-kicker">SIGUIENTE PARTIDO</div>
+        <div class="mini-versus">
+          <div><span class="crest crest-blue">C</span><strong>CENTELLA</strong></div>
+          <b>VS</b>
+          <div><span class="crest crest-white">V</span><strong>VISITANTE</strong></div>
+        </div>
+        <button data-go="kickoff">CONFIGURAR PARTIDO <span>→</span></button>
+      </aside>
+    </section>
+
+    <section id="kickoff" class="view kickoff-view">
+      <div class="section-heading">
+        <p class="eyebrow"><span></span> PARTIDO RÁPIDO</p>
+        <h2>ELIGE TU LADO</h2>
+        <p>Una pantalla, dos equipos, cero ruido.</p>
+      </div>
+
+      <div class="versus-stage">
+        <article class="team team-home selected">
+          <div class="team-label">LOCAL</div>
+          <div class="large-crest crest-blue">C</div>
+          <h3>CENTELLA FC</h3>
+          <p>AZUL ELÉCTRICO</p>
+          <div class="team-meta"><span>ATA 81</span><span>MED 79</span><span>DEF 80</span></div>
+        </article>
+
+        <div class="versus-center">
+          <span class="match-type">EXHIBICIÓN</span>
+          <strong>VS</strong>
+          <div class="difficulty"><small>DIFICULTAD</small><b>PROFESIONAL</b></div>
+          <button id="playButton" class="primary-cta play-cta"><span>INICIAR PARTIDO</span><b>▶</b></button>
+          <p id="playStatus" class="play-status">Comprobando motor…</p>
+        </div>
+
+        <article class="team team-away">
+          <div class="team-label">VISITANTE</div>
+          <div class="large-crest crest-white">V</div>
+          <h3>VOLT UNITED</h3>
+          <p>BLANCO / NEGRO</p>
+          <div class="team-meta"><span>ATA 80</span><span>MED 80</span><span>DEF 79</span></div>
+        </article>
+      </div>
+
+      <button class="back-button" data-go="home">← VOLVER</button>
+    </section>
+
+    <section id="training" class="view training-view">
+      <div class="section-heading">
+        <p class="eyebrow"><span></span> ENTRENAMIENTO</p>
+        <h2>TOCA EL BALÓN.</h2>
+        <p>Sesiones cortas para acostumbrarte al control antes del partido.</p>
+      </div>
+      <div class="training-list">
+        <button class="training-tile active"><small>01</small><strong>LIBRE</strong><span>Movimiento, pase y disparo</span></button>
+        <button class="training-tile"><small>02</small><strong>ATAQUE</strong><span>Finalización y uno contra uno</span></button>
+        <button class="training-tile"><small>03</small><strong>POSESIÓN</strong><span>Circulación y presión</span></button>
+      </div>
+      <div class="training-footer">
+        <button class="back-button" data-go="home">← VOLVER</button>
+        <button id="trainingPlayButton" class="primary-cta"><span>ENTRAR AL CAMPO</span><b>▶</b></button>
+      </div>
+    </section>
+
+    <footer class="footer-hints">
+      <span><kbd>ENTER</kbd> SELECCIONAR</span>
+      <span><kbd>ESC</kbd> VOLVER</span>
+      <span id="runtimeLabel">MOTOR · COMPROBANDO</span>
+    </footer>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>
