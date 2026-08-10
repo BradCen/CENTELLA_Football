@@ -57,17 +57,18 @@ DEFAULTS: Dict[str, Any] = {
         "menu_repeat_delay_ms": 245,
         "menu_repeat_ms": 120,
         "buttons": {
+            # Generic SDL order: A/Cross, B/Circle, X/Square, Y/Triangle,
+            # LB/L1, RB/R1, View/Create, Menu/Options.
             "confirm": 0,
             "back": 1,
-            "high_pass": 2,
-            "through_pass": 3,
-            "switch_player": 4,
-            "teammate_press": 5,
-            "view": 6,
-            "pause": 7,
             "short_pass": 0,
             "shot": 1,
-            "special": 2,
+            "high_pass": 2,
+            "long_pass": 3,
+            "switch_player": 4,
+            "dribble": 5,
+            "view": 6,
+            "pause": 7,
         },
         "axes": {
             "move_x": 0,
@@ -78,7 +79,7 @@ DEFAULTS: Dict[str, Any] = {
     "profile": {
         "name": "PLAYER 1",
         "last_tab": "HOME",
-        "last_mode": "KICK OFF",
+        "last_mode": "PATADA INICIAL",
     },
 }
 
@@ -93,6 +94,17 @@ def _deep_merge(base: Dict[str, Any], incoming: Dict[str, Any]) -> Dict[str, Any
     return out
 
 
+def _migrate(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Keep settings created by the first shell compatible with Beta v2."""
+    buttons = data.get("controller", {}).get("buttons", {}) if isinstance(data, dict) else {}
+    if isinstance(buttons, dict):
+        if "long_pass" not in buttons and "through_pass" in buttons:
+            buttons["long_pass"] = buttons["through_pass"]
+        if "dribble" not in buttons and "teammate_press" in buttons:
+            buttons["dribble"] = buttons["teammate_press"]
+    return data
+
+
 class Settings:
     def __init__(self) -> None:
         self.data = copy.deepcopy(DEFAULTS)
@@ -102,7 +114,7 @@ class Settings:
         try:
             raw = json.loads(SETTINGS_PATH.read_text(encoding="utf-8"))
             if isinstance(raw, dict):
-                self.data = _deep_merge(DEFAULTS, raw)
+                self.data = _deep_merge(DEFAULTS, _migrate(raw))
         except (FileNotFoundError, json.JSONDecodeError, OSError):
             self.data = copy.deepcopy(DEFAULTS)
 
