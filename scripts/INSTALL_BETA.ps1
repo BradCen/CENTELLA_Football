@@ -62,7 +62,7 @@ $Python = Find-Python310
 if (-not $Python) {
     Write-Host "" -ForegroundColor Red
     Write-Host "FALTA PYTHON 3.10 x64" -ForegroundColor Red
-    Write-Host "El motor nativo de esta base está fijado a Python 3.10 por su manifiesto vcpkg." -ForegroundColor Yellow
+    Write-Host "El módulo nativo de esta base está fijado a Python 3.10 por su manifiesto vcpkg." -ForegroundColor Yellow
     Write-Host "Instala Python 3.10 x64 o restaura TOOLCHAIN\Python310 y vuelve a ejecutar este script."
     exit 10
 }
@@ -84,17 +84,37 @@ $env:GENERATOR_PLATFORM = "x64"
 $env:PY_VERSION = "3.10"
 $env:BUILD_CONFIGURATION = "Release"
 $env:PIP_DISABLE_PIP_VERSION_CHECK = "1"
+$env:PYGAME_HIDE_SUPPORT_PROMPT = "1"
 Set-Location $ProjectRoot
 
-Write-Host "`n[1/4] Preparando dependencias Python..." -ForegroundColor Cyan
+Write-Host "`n[1/5] Preparando herramientas Python compatibles..." -ForegroundColor Cyan
 & $Python -m pip install "pip==23.2.1" "setuptools==65.5.0" "wheel==0.38.4"
 if ($LASTEXITCODE -ne 0) { throw "No se pudieron preparar pip/setuptools/wheel." }
-& $Python -m pip install "pygame==2.6.1" absl-py psutil "numpy<2" opencv-python six "gym==0.21.0"
+
+# Gym 0.21 predates modern PEP-517 build isolation. Installing it in its own
+# no-isolation pass prevents pip from silently pulling a modern setuptools into
+# a temporary build environment and reproducing the old extras_require crash.
+Write-Host "`n[2/5] Instalando Gym legado sin aislamiento..." -ForegroundColor Cyan
+& $Python -m pip install --no-build-isolation "gym==0.21.0"
+if ($LASTEXITCODE -ne 0) {
+    throw "Gym 0.21 no pudo instalarse. El script NO continuará con un entorno parcialmente roto."
+}
+
+Write-Host "`n[3/5] Instalando dependencias estables del runtime..." -ForegroundColor Cyan
+& $Python -m pip install `
+    "pygame==2.6.1" `
+    "absl-py>=1.4,<3" `
+    "psutil>=5.9,<8" `
+    "numpy==1.26.4" `
+    "opencv-python==4.10.0.84" `
+    "six>=1.16,<2"
 if ($LASTEXITCODE -ne 0) { throw "Falló la instalación de dependencias Python." }
 
 function Invoke-GrfBuild {
-    Write-Host "`n[2/4] Compilando Gameplay Football / GRF..." -ForegroundColor Cyan
-    & $Python -m pip install -e . --no-build-isolation -v
+    Write-Host "`n[4/5] Compilando Gameplay Football / GRF..." -ForegroundColor Cyan
+    # Dependencies are deliberately preinstalled above. --no-deps prevents pip
+    # from re-resolving Gym and undoing the compatibility work.
+    & $Python -m pip install -e . --no-build-isolation --no-deps -v
     return $LASTEXITCODE
 }
 
@@ -122,16 +142,16 @@ if ($firstExit -ne 0) {
     if ($aliasesCreated -gt 0) { $secondExit = Invoke-GrfBuild } else { $secondExit = $firstExit }
     if ($secondExit -ne 0) {
         Write-Host "`nLa compilación nativa todavía falló." -ForegroundColor Red
-        Write-Host "Copia desde '[2/4]' hasta el final y envíalo en el chat." -ForegroundColor Yellow
+        Write-Host "Copia desde '[4/5]' hasta el final y envíalo en el chat." -ForegroundColor Yellow
         exit $secondExit
     }
 }
 
-Write-Host "`n[3/4] Verificando imports y arquitectura..." -ForegroundColor Cyan
-& $Python -c "import struct,absl,pygame,numpy,cv2,psutil,gfootball_engine; assert struct.calcsize('P')*8==64; print('gfootball_engine:', gfootball_engine.__file__); print('RUNTIME OK - 64 bit')"
-if ($LASTEXITCODE -ne 0) { throw "El motor compiló pero el import nativo falló." }
+Write-Host "`n[5/5] Verificando imports, arquitectura y símbolo nativo..." -ForegroundColor Cyan
+& $Python -c "import struct,absl,pygame,numpy,cv2,psutil,gfootball_engine; assert struct.calcsize('P')*8==64; assert hasattr(gfootball_engine,'GameEnv'); assert hasattr(gfootball_engine,'GameState'); print('gfootball_engine:', gfootball_engine.__file__); print('RUNTIME OK - 64 bit')"
+if ($LASTEXITCODE -ne 0) { throw "El build terminó pero el módulo nativo no es utilizable." }
 
-Write-Host "`n[4/4] Listo." -ForegroundColor Green
+Write-Host "`nCENTELLA Football runtime listo." -ForegroundColor Green
 Write-Host "Ya puedes cerrar esta ventana y ejecutar:" -ForegroundColor White
 Write-Host "  .\scripts\RUN_BETA.ps1" -ForegroundColor Cyan
 Write-Host "o hacer doble clic en RUN_CENTELLA_BETA.bat" -ForegroundColor Cyan
