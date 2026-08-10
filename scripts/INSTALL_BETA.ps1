@@ -5,6 +5,8 @@ $ProjectRoot = Split-Path -Parent $PSScriptRoot
 $WorkspaceRoot = Split-Path -Parent $ProjectRoot
 $ToolchainRoot = Join-Path $WorkspaceRoot "TOOLCHAIN"
 $Cache = Join-Path $ToolchainRoot "vcpkg_cache"
+$CentellaVcpkg = Join-Path $ToolchainRoot "vcpkg-centella"
+$VcpkgBaseline = "b18b17865cfb6bd24620a00f30691be6775abb96"
 
 function Find-Python310 {
     $candidates = @(
@@ -28,32 +30,32 @@ function Find-Python310 {
     return $null
 }
 
-function Find-Or-PrepareVcpkg {
-    $candidates = @(
-        (Join-Path $ToolchainRoot "vcpkg"),
-        (Join-Path $WorkspaceRoot "vcpkg"),
-        "F:\vcpkg",
-        "C:\vcpkg"
-    )
-    foreach ($candidate in $candidates) {
-        if (Test-Path (Join-Path $candidate "vcpkg.exe")) { return $candidate }
+function Prepare-CentellaVcpkg {
+    $git = Get-Command git -ErrorAction SilentlyContinue
+    if (-not $git) { throw "Git es necesario para preparar el toolchain reproducible de CENTELLA." }
+
+    New-Item -ItemType Directory -Force $ToolchainRoot | Out-Null
+    $needClone = -not (Test-Path (Join-Path $CentellaVcpkg ".git"))
+    if ($needClone) {
+        if (Test-Path $CentellaVcpkg) { Remove-Item $CentellaVcpkg -Recurse -Force }
+        Write-Host "Preparando vcpkg aislado para CENTELLA..." -ForegroundColor Yellow
+        git clone https://github.com/microsoft/vcpkg.git $CentellaVcpkg
+        if ($LASTEXITCODE -ne 0) { throw "No se pudo clonar vcpkg." }
     }
 
-    $git = Get-Command git -ErrorAction SilentlyContinue
-    if (-not $git) { throw "No encontré vcpkg ni Git para descargarlo." }
-    $target = Join-Path $ToolchainRoot "vcpkg"
-    New-Item -ItemType Directory -Force $ToolchainRoot | Out-Null
-    if (Test-Path $target) { Remove-Item $target -Recurse -Force }
-    Write-Host "No había vcpkg. Descargando una copia aislada en TOOLCHAIN..." -ForegroundColor Yellow
-    git clone https://github.com/microsoft/vcpkg.git $target
-    if ($LASTEXITCODE -ne 0) { throw "No se pudo clonar vcpkg." }
-    & (Join-Path $target "bootstrap-vcpkg.bat") -disableMetrics
+    Write-Host "Fijando vcpkg al baseline compatible con GRF/Python 3.10..." -ForegroundColor Yellow
+    git -C $CentellaVcpkg fetch --all --tags --prune
+    if ($LASTEXITCODE -ne 0) { throw "No se pudo actualizar el repositorio vcpkg aislado." }
+    git -C $CentellaVcpkg checkout --force $VcpkgBaseline
+    if ($LASTEXITCODE -ne 0) { throw "No se pudo seleccionar el baseline vcpkg de CENTELLA." }
+
+    & (Join-Path $CentellaVcpkg "bootstrap-vcpkg.bat") -disableMetrics
     if ($LASTEXITCODE -ne 0) { throw "No se pudo preparar vcpkg." }
-    return $target
+    return $CentellaVcpkg
 }
 
 Write-Host ""
-Write-Host "CENTELLA FOOTBALL - BETA RUNTIME" -ForegroundColor Cyan
+Write-Host "CENTELLA FOOTBALL - WINDOWS RUNTIME" -ForegroundColor Cyan
 Write-Host "Project:   $ProjectRoot"
 Write-Host "Workspace: $WorkspaceRoot"
 Write-Host "Toolchain: $ToolchainRoot"
@@ -62,15 +64,21 @@ $Python = Find-Python310
 if (-not $Python) {
     Write-Host "" -ForegroundColor Red
     Write-Host "FALTA PYTHON 3.10 x64" -ForegroundColor Red
-    Write-Host "El módulo nativo de esta base está fijado a Python 3.10 por su manifiesto vcpkg." -ForegroundColor Yellow
+    Write-Host "La base nativa de esta versión utiliza ABI Python 3.10." -ForegroundColor Yellow
     Write-Host "Instala Python 3.10 x64 o restaura TOOLCHAIN\Python310 y vuelve a ejecutar este script."
     exit 10
 }
 Write-Host "Python: $Python" -ForegroundColor Green
 & $Python --version
 
-$Vcpkg = Find-Or-PrepareVcpkg
-Write-Host "vcpkg: $Vcpkg" -ForegroundColor Green
+$bits = & $Python -c "import struct; print(struct.calcsize('P')*8)"
+if ($LASTEXITCODE -ne 0 -or $bits.Trim() -ne "64") {
+    throw "CENTELLA Football requiere Python 3.10 x64 para este runtime."
+}
+
+$Vcpkg = Prepare-CentellaVcpkg
+Write-Host "vcpkg CENTELLA: $Vcpkg" -ForegroundColor Green
+git -C $Vcpkg log -1 --oneline
 
 $cmake = Get-Command cmake -ErrorAction SilentlyContinue
 if (-not $cmake) { throw "CMake no está disponible en PATH. Abre Developer PowerShell de Visual Studio." }
@@ -79,6 +87,7 @@ New-Item -ItemType Directory -Force $Cache | Out-Null
 $env:VCPKG_ROOT = $Vcpkg
 $env:VCPKG_DEFAULT_BINARY_CACHE = $Cache
 $env:VCPKG_DISABLE_METRICS = "1"
+$env:VCPKG_FEATURE_FLAGS = "versions"
 $env:CMAKE_POLICY_VERSION_MINIMUM = "3.10"
 $env:GENERATOR_PLATFORM = "x64"
 $env:PY_VERSION = "3.10"
@@ -91,9 +100,6 @@ Write-Host "`n[1/5] Preparando herramientas Python compatibles..." -ForegroundCo
 & $Python -m pip install "pip==23.2.1" "setuptools==65.5.0" "wheel==0.38.4"
 if ($LASTEXITCODE -ne 0) { throw "No se pudieron preparar pip/setuptools/wheel." }
 
-# Gym 0.21 predates modern PEP-517 build isolation. Installing it in its own
-# no-isolation pass prevents pip from silently pulling a modern setuptools into
-# a temporary build environment and reproducing the old extras_require crash.
 Write-Host "`n[2/5] Instalando Gym legado sin aislamiento..." -ForegroundColor Cyan
 & $Python -m pip install --no-build-isolation "gym==0.21.0"
 if ($LASTEXITCODE -ne 0) {
@@ -112,15 +118,13 @@ if ($LASTEXITCODE -ne 0) { throw "Falló la instalación de dependencias Python.
 
 function Invoke-GrfBuild {
     Write-Host "`n[4/5] Compilando Gameplay Football / GRF..." -ForegroundColor Cyan
-    # Dependencies are deliberately preinstalled above. --no-deps prevents pip
-    # from re-resolving Gym and undoing the compatibility work.
     & $Python -m pip install -e . --no-build-isolation --no-deps -v
-    return $LASTEXITCODE
+    return [int]$LASTEXITCODE
 }
 
 $firstExit = Invoke-GrfBuild
 if ($firstExit -ne 0) {
-    Write-Host "Primer intento falló. Aplicando compatibilidad Boost Atomic conocida..." -ForegroundColor Yellow
+    Write-Host "Primer intento falló. Comprobando compatibilidad Boost Atomic histórica..." -ForegroundColor Yellow
     $installedRoot = Join-Path $ProjectRoot "third_party\gfootball_engine\build_win\vcpkg_installed\x64-windows"
     $aliasesCreated = 0
     $aliasPairs = @(
@@ -142,12 +146,12 @@ if ($firstExit -ne 0) {
     if ($aliasesCreated -gt 0) { $secondExit = Invoke-GrfBuild } else { $secondExit = $firstExit }
     if ($secondExit -ne 0) {
         Write-Host "`nLa compilación nativa todavía falló." -ForegroundColor Red
-        Write-Host "Copia desde '[4/5]' hasta el final y envíalo en el chat." -ForegroundColor Yellow
+        Write-Host "No cambies paquetes al azar: envía desde '[4/5]' hasta el final para comparar con CI." -ForegroundColor Yellow
         exit $secondExit
     }
 }
 
-Write-Host "`n[5/5] Verificando imports, arquitectura y símbolo nativo..." -ForegroundColor Cyan
+Write-Host "`n[5/5] Verificando imports, arquitectura y API nativa..." -ForegroundColor Cyan
 & $Python -c "import struct,absl,pygame,numpy,cv2,psutil,gfootball_engine; assert struct.calcsize('P')*8==64; assert hasattr(gfootball_engine,'GameEnv'); assert hasattr(gfootball_engine,'GameState'); print('gfootball_engine:', gfootball_engine.__file__); print('RUNTIME OK - 64 bit')"
 if ($LASTEXITCODE -ne 0) { throw "El build terminó pero el módulo nativo no es utilizable." }
 
