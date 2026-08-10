@@ -4,37 +4,76 @@ $Host.UI.RawUI.WindowTitle = "CENTELLA Football - Install / Repair"
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
 $WorkspaceRoot = Split-Path -Parent $ProjectRoot
 $ToolchainRoot = Join-Path $WorkspaceRoot "TOOLCHAIN"
-$Python = Join-Path $ToolchainRoot "Python310\python.exe"
-$Vcpkg = Join-Path $ToolchainRoot "vcpkg"
 $Cache = Join-Path $ToolchainRoot "vcpkg_cache"
 
-Write-Host ""
-Write-Host "CENTELLA FOOTBALL - BETA RUNTIME" -ForegroundColor Cyan
-Write-Host "Project: $ProjectRoot"
-Write-Host "Toolchain: $ToolchainRoot"
-
-if (-not (Test-Path $Python)) {
-    Write-Host "No encontré $Python" -ForegroundColor Yellow
+function Find-Python310 {
+    $candidates = @(
+        (Join-Path $ToolchainRoot "Python310\python.exe"),
+        (Join-Path $ToolchainRoot "python310\python.exe"),
+        (Join-Path $ToolchainRoot "Python\python.exe")
+    )
+    foreach ($candidate in $candidates) {
+        if (Test-Path $candidate) {
+            $version = & $candidate -c "import sys;print(f'{sys.version_info.major}.{sys.version_info.minor}')" 2>$null
+            if ($LASTEXITCODE -eq 0 -and $version.Trim() -eq "3.10") { return $candidate }
+        }
+    }
     $pyLauncher = Get-Command py -ErrorAction SilentlyContinue
     if ($pyLauncher) {
         $candidate = & py -3.10 -c "import sys;print(sys.executable)" 2>$null
-        if ($LASTEXITCODE -eq 0 -and (Test-Path $candidate)) { $Python = $candidate.Trim() }
+        if ($LASTEXITCODE -eq 0 -and $candidate -and (Test-Path $candidate.Trim())) {
+            return $candidate.Trim()
+        }
     }
-}
-if (-not (Test-Path $Python)) {
-    throw "Necesito Python 3.10 x64. Instala Python 3.10 o restaura TOOLCHAIN\Python310."
+    return $null
 }
 
+function Find-Or-PrepareVcpkg {
+    $candidates = @(
+        (Join-Path $ToolchainRoot "vcpkg"),
+        (Join-Path $WorkspaceRoot "vcpkg"),
+        "F:\vcpkg",
+        "C:\vcpkg"
+    )
+    foreach ($candidate in $candidates) {
+        if (Test-Path (Join-Path $candidate "vcpkg.exe")) { return $candidate }
+    }
+
+    $git = Get-Command git -ErrorAction SilentlyContinue
+    if (-not $git) { throw "No encontré vcpkg ni Git para descargarlo." }
+    $target = Join-Path $ToolchainRoot "vcpkg"
+    New-Item -ItemType Directory -Force $ToolchainRoot | Out-Null
+    if (Test-Path $target) { Remove-Item $target -Recurse -Force }
+    Write-Host "No había vcpkg. Descargando una copia aislada en TOOLCHAIN..." -ForegroundColor Yellow
+    git clone https://github.com/microsoft/vcpkg.git $target
+    if ($LASTEXITCODE -ne 0) { throw "No se pudo clonar vcpkg." }
+    & (Join-Path $target "bootstrap-vcpkg.bat") -disableMetrics
+    if ($LASTEXITCODE -ne 0) { throw "No se pudo preparar vcpkg." }
+    return $target
+}
+
+Write-Host ""
+Write-Host "CENTELLA FOOTBALL - BETA RUNTIME" -ForegroundColor Cyan
+Write-Host "Project:   $ProjectRoot"
+Write-Host "Workspace: $WorkspaceRoot"
+Write-Host "Toolchain: $ToolchainRoot"
+
+$Python = Find-Python310
+if (-not $Python) {
+    Write-Host "" -ForegroundColor Red
+    Write-Host "FALTA PYTHON 3.10 x64" -ForegroundColor Red
+    Write-Host "El motor nativo de esta base está fijado a Python 3.10 por su manifiesto vcpkg." -ForegroundColor Yellow
+    Write-Host "Instala Python 3.10 x64 o restaura TOOLCHAIN\Python310 y vuelve a ejecutar este script."
+    exit 10
+}
 Write-Host "Python: $Python" -ForegroundColor Green
 & $Python --version
 
-if (-not (Test-Path $Vcpkg)) {
-    $fallback = "F:\vcpkg"
-    if (Test-Path $fallback) { $Vcpkg = $fallback }
-}
-if (-not (Test-Path (Join-Path $Vcpkg "vcpkg.exe"))) {
-    throw "No encontré vcpkg. Se esperaba TOOLCHAIN\vcpkg o F:\vcpkg."
-}
+$Vcpkg = Find-Or-PrepareVcpkg
+Write-Host "vcpkg: $Vcpkg" -ForegroundColor Green
+
+$cmake = Get-Command cmake -ErrorAction SilentlyContinue
+if (-not $cmake) { throw "CMake no está disponible en PATH. Abre Developer PowerShell de Visual Studio." }
 
 New-Item -ItemType Directory -Force $Cache | Out-Null
 $env:VCPKG_ROOT = $Vcpkg
@@ -49,7 +88,9 @@ Set-Location $ProjectRoot
 
 Write-Host "`n[1/4] Preparando dependencias Python..." -ForegroundColor Cyan
 & $Python -m pip install "pip==23.2.1" "setuptools==65.5.0" "wheel==0.38.4"
+if ($LASTEXITCODE -ne 0) { throw "No se pudieron preparar pip/setuptools/wheel." }
 & $Python -m pip install "pygame==2.6.1" absl-py psutil "numpy<2" opencv-python six "gym==0.21.0"
+if ($LASTEXITCODE -ne 0) { throw "Falló la instalación de dependencias Python." }
 
 function Invoke-GrfBuild {
     Write-Host "`n[2/4] Compilando Gameplay Football / GRF..." -ForegroundColor Cyan
@@ -80,15 +121,17 @@ if ($firstExit -ne 0) {
     }
     if ($aliasesCreated -gt 0) { $secondExit = Invoke-GrfBuild } else { $secondExit = $firstExit }
     if ($secondExit -ne 0) {
-        Write-Host "`nLa compilación nativa todavía falló. Copia desde '[2/4]' hasta el final y envíalo en el chat." -ForegroundColor Red
+        Write-Host "`nLa compilación nativa todavía falló." -ForegroundColor Red
+        Write-Host "Copia desde '[2/4]' hasta el final y envíalo en el chat." -ForegroundColor Yellow
         exit $secondExit
     }
 }
 
-Write-Host "`n[3/4] Verificando imports..." -ForegroundColor Cyan
-& $Python -c "import absl, pygame, numpy, cv2, psutil, gfootball_engine; print('gfootball_engine:', gfootball_engine.__file__); print('RUNTIME OK')"
+Write-Host "`n[3/4] Verificando imports y arquitectura..." -ForegroundColor Cyan
+& $Python -c "import struct,absl,pygame,numpy,cv2,psutil,gfootball_engine; assert struct.calcsize('P')*8==64; print('gfootball_engine:', gfootball_engine.__file__); print('RUNTIME OK - 64 bit')"
 if ($LASTEXITCODE -ne 0) { throw "El motor compiló pero el import nativo falló." }
 
 Write-Host "`n[4/4] Listo." -ForegroundColor Green
-Write-Host "Ejecuta la beta con:" -ForegroundColor White
+Write-Host "Ya puedes cerrar esta ventana y ejecutar:" -ForegroundColor White
 Write-Host "  .\scripts\RUN_BETA.ps1" -ForegroundColor Cyan
+Write-Host "o hacer doble clic en RUN_CENTELLA_BETA.bat" -ForegroundColor Cyan
