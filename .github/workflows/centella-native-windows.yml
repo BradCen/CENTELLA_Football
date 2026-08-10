@@ -37,18 +37,18 @@ jobs:
           python -m pip install 'pip==23.2.1' 'setuptools==65.5.0' 'wheel==0.38.4' psutil
           python -c "import struct,sys; print(sys.version); print('bits', struct.calcsize('P')*8)"
 
-      - name: Prepare GRF-era vcpkg baseline
+      - name: Prepare modern vcpkg tool with GRF-era port baseline
         shell: pwsh
         run: |
           $root = Join-Path $env:RUNNER_TEMP 'centella-vcpkg'
-          # This is the baseline used by upstream GRF when Windows/Python 3.10
-          # support was introduced. Keeping the ports and Python override from the
-          # same era avoids mixing Python 3.10.1 with 2026 libffi/zlib port layouts.
-          $baseline = 'b18b17865cfb6bd24620a00f30691be6775abb96'
+          # Keep a modern vcpkg executable/scripts so tool downloads still exist in
+          # 2026. Port versions are NOT taken from this commit: the GRF manifest is
+          # pinned to b18b1786..., the upstream Windows/Python-3.10 era baseline.
+          $toolCommit = 'e58f8d7c8b7bfc1f072c2e20c3d3a55222a2a39f'
           git clone https://github.com/microsoft/vcpkg.git $root
           if ($LASTEXITCODE -ne 0) { throw 'vcpkg clone failed' }
-          git -C $root checkout $baseline
-          if ($LASTEXITCODE -ne 0) { throw 'vcpkg baseline checkout failed' }
+          git -C $root checkout $toolCommit
+          if ($LASTEXITCODE -ne 0) { throw 'vcpkg tool checkout failed' }
           & (Join-Path $root 'bootstrap-vcpkg.bat') -disableMetrics
           if ($LASTEXITCODE -ne 0) { throw 'vcpkg bootstrap failed' }
           "VCPKG_ROOT=$root" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
@@ -56,7 +56,10 @@ jobs:
           New-Item -ItemType Directory -Force $cache | Out-Null
           "VCPKG_DEFAULT_BINARY_CACHE=$cache" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
           & (Join-Path $root 'vcpkg.exe') version
+          Write-Host 'Tool commit:'
           git -C $root log -1 --oneline
+          Write-Host 'Manifest port baseline:'
+          Get-Content third_party\gfootball_engine\vcpkg_manifests\py3.10\vcpkg.json
 
       - name: Install Python runtime dependencies
         shell: pwsh
