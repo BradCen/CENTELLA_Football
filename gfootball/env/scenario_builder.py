@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 """Class responsible for generating scenarios."""
 
 import importlib
@@ -69,13 +68,26 @@ class Scenario(object):
 
   def _FakePlayersForEmptyTeam(self, team):
     if len(team) == 0:
-      self.AddPlayer(-1.000000, 0.420000, libgame.e_PlayerRole.e_PlayerRole_GK, True)
+      self.AddPlayer(-1.000000, 0.420000,
+                     libgame.e_PlayerRole.e_PlayerRole_GK, True)
 
   def _BuildScenarioConfig(self):
-    """Builds scenario config from gfootball.environment config."""
+    """Build scenario config from the environment/product config."""
     self._scenario_cfg.real_time = self._config['real_time']
     self._scenario_cfg.left_agents = self._config.number_of_left_players()
     self._scenario_cfg.right_agents = self._config.number_of_right_players()
+
+    # CENTELLA product settings are applied *after* the scenario module builds
+    # its defaults. This keeps all research scenarios unchanged while Patada
+    # Inicial can offer real duration/difficulty controls.
+    if 'game_duration_override' in self._config:
+      duration = int(self._config['game_duration_override'])
+      if duration > 0:
+        self._scenario_cfg.game_duration = duration
+    if 'right_team_difficulty_override' in self._config:
+      difficulty = float(self._config['right_team_difficulty_override'])
+      self._scenario_cfg.right_team_difficulty = max(0.0, min(1.0, difficulty))
+
     # This is needed to record 'game_engine_random_seed' in the dump.
     if 'game_engine_random_seed' not in self._config._values:
       self._config.set_scenario_value('game_engine_random_seed',
@@ -97,15 +109,7 @@ class Scenario(object):
     self._active_team = team
 
   def AddPlayer(self, x, y, role, lazy=False, controllable=True):
-    """Build player for the current scenario.
-
-    Args:
-      x: x coordinate of the player in the range [-1, 1].
-      y: y coordinate of the player in the range [-0.42, 0.42].
-      role: Player's role in the game (goal keeper etc.).
-      lazy: Computer doesn't perform any automatic actions for lazy player.
-      controllable: Whether player can be controlled.
-    """
+    """Build player for the current scenario."""
     player = Player(x, y, role, lazy, controllable)
     if self._active_team == Team.e_Left:
       self._scenario_cfg.left_team.append(player)
