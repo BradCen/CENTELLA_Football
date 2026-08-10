@@ -101,6 +101,52 @@ jobs:
           print('UI SMOKE OK')
           PY
 
+      - name: Capture presentation reference frames
+        run: |
+          mkdir -p ui-artifacts
+          python - <<'PY'
+          import pathlib
+          import time
+          import pygame
+          from centella.product_frontend import App
+          from centella.modes import MODES
+
+          out = pathlib.Path('ui-artifacts')
+          app = App()
+          app.screen = pygame.display.set_mode((1280, 720))
+          app.viewport.screen = app.screen
+          app.viewport.update()
+
+          def capture(name, scene, setup=None):
+              if setup:
+                  setup()
+              app.enter(scene)
+              app.scene_started = time.perf_counter() - 2.0
+              app.render()
+              path = out / f'{name}.png'
+              pygame.image.save(app.screen, str(path))
+              print('CAPTURED', path)
+
+          capture('01-splash', 'splash')
+          capture('02-home', 'hub', lambda: app.set_tab(0))
+          capture('03-play', 'hub', lambda: app.set_tab(1))
+          capture('04-kickoff', 'quick')
+          capture('05-career', 'career')
+          capture('06-controls', 'controls')
+          capture('07-system', 'doctor')
+          app.pending_coop = False
+          capture('08-prematch', 'prematch')
+          pygame.quit()
+          PY
+
+      - name: Upload UI reference frames
+        uses: actions/upload-artifact@v4
+        with:
+          name: centella-ui-reference-frames
+          path: ui-artifacts/*.png
+          if-no-files-found: error
+          retention-days: 14
+
   windows-launcher:
     runs-on: windows-latest
     timeout-minutes: 15
