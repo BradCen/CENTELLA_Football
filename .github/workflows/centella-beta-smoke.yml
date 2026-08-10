@@ -42,6 +42,7 @@ jobs:
           import centella.beta_frontend
           import centella.product_frontend
           import centella.cinematic_frontend
+          import centella.release_frontend
           print('IMPORTS OK')
           PY
 
@@ -60,11 +61,11 @@ jobs:
           pygame.quit()
           PY
 
-      - name: Headless cinematic UI render smoke test
+      - name: Headless release UI render smoke test
         run: |
           python - <<'PY'
           import pygame
-          from centella.cinematic_frontend import App
+          from centella.release_frontend import App
           from centella.controller import InputAction
           from centella.modes import MODES
 
@@ -99,17 +100,17 @@ jobs:
           app.render()
 
           pygame.quit()
-          print('CINEMATIC UI SMOKE OK')
+          print('RELEASE UI SMOKE OK')
           PY
 
-      - name: Capture cinematic reference frames
+      - name: Capture release reference frames
         run: |
           mkdir -p ui-artifacts
           python - <<'PY'
           import pathlib
           import time
           import pygame
-          from centella.cinematic_frontend import App
+          from centella.release_frontend import App
 
           out = pathlib.Path('ui-artifacts')
           app = App()
@@ -194,7 +195,7 @@ jobs:
         run: |
           $workspaceRoot = Split-Path -Parent $env:GITHUB_WORKSPACE
           $python = Join-Path $workspaceRoot "TOOLCHAIN\Python310\python.exe"
-          & $python -c "import pygame, centella.cinematic_frontend, centella.runtime; print('WINDOWS TOOLCHAIN IMPORTS OK', pygame.version.ver)"
+          & $python -c "import pygame, centella.release_frontend, centella.runtime; print('WINDOWS TOOLCHAIN IMPORTS OK', pygame.version.ver)"
 
       - name: Test the public BAT launcher wrapper
         shell: cmd
