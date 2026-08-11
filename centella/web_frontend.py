@@ -27,12 +27,32 @@ class CentellaApi:
         }
 
     def play(self, local_players: int = 1, versus: bool = False) -> Dict[str, Any]:
-        # Controller discovery is intentionally conservative until the native
-        # runtime owns input enumeration. Keyboard always remains a valid P1.
+        # Kept for compatibility with older menu builds.
         ok, message = runtime.launch_match(
             controller_count=0,
             local_players=max(1, int(local_players)),
             versus=bool(versus),
+        )
+        return {"ok": ok, "message": message}
+
+    def play_config(self, payload: Dict[str, Any] | None = None) -> Dict[str, Any]:
+        """Launch the real Gameplay Football match configured by the web menu."""
+        config = dict(payload or {})
+        try:
+            local_players = max(1, int(config.get("local_players", 1)))
+        except (TypeError, ValueError):
+            local_players = 1
+        try:
+            controller_count = max(0, int(config.get("controller_count", 0)))
+        except (TypeError, ValueError):
+            controller_count = 0
+
+        ok, message = runtime.launch_match(
+            level=str(config.get("level", "") or ""),
+            controller_count=controller_count,
+            local_players=local_players,
+            versus=bool(config.get("versus", False)),
+            match_config=config,
         )
         return {"ok": ok, "message": message}
 
