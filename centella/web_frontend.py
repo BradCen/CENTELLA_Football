@@ -6,9 +6,18 @@ from typing import Any, Dict
 
 from . import runtime
 
-WEB_ROOT = Path(__file__).resolve().parent / "web"
-INDEX_HTML = WEB_ROOT / "index.html"
+CENTELLA_ROOT = Path(__file__).resolve().parent
+REACT_WEB_ROOT = CENTELLA_ROOT / "web-react"
+LEGACY_WEB_ROOT = CENTELLA_ROOT / "web"
 _WINDOW: Any | None = None
+
+
+def _index_html() -> Path:
+    """Prefer the new React build, but never brick the launcher during migration."""
+    react_index = REACT_WEB_ROOT / "index.html"
+    if react_index.exists():
+        return react_index
+    return LEGACY_WEB_ROOT / "index.html"
 
 
 class CentellaApi:
@@ -72,15 +81,16 @@ class CentellaApi:
 def main() -> None:
     global _WINDOW
 
-    if not INDEX_HTML.exists():
-        raise FileNotFoundError(f"CENTELLA web frontend missing: {INDEX_HTML}")
+    index_html = _index_html()
+    if not index_html.exists():
+        raise FileNotFoundError(f"CENTELLA web frontend missing: {index_html}")
 
     import webview
 
     api = CentellaApi()
     _WINDOW = webview.create_window(
         "CENTELLA Football",
-        str(INDEX_HTML),
+        str(index_html),
         js_api=api,
         width=1600,
         height=900,
