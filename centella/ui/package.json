@@ -1,7 +1,7 @@
 {
   "name": "centella-football-ui",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -14,7 +14,8 @@
     "vite": "latest",
     "typescript": "latest",
     "react": "latest",
-    "react-dom": "latest"
+    "react-dom": "latest",
+    "react-soccer-lineup": "1.0.0-beta.12"
   },
   "devDependencies": {
     "@types/react": "latest",
