@@ -1,0 +1,37 @@
+name: CENTELLA React UI
+
+on:
+  push:
+    branches:
+      - agent/centella-first-impression
+    paths:
+      - 'centella/ui/**'
+      - 'centella/web_frontend.py'
+      - '.github/workflows/centella-react-ui.yml'
+  workflow_dispatch:
+
+jobs:
+  build-ui:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: centella/ui
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+          cache: 'npm'
+          cache-dependency-path: centella/ui/package-lock.json
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build React TypeScript UI
+        run: npm run build
+
+      - name: Verify production entry
+        run: test -f ../web-react/index.html
