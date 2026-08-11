@@ -8,16 +8,16 @@ from . import runtime
 
 WEB_ROOT = Path(__file__).resolve().parent / "web"
 INDEX_HTML = WEB_ROOT / "index.html"
+_WINDOW: Any | None = None
 
 
 class CentellaApi:
-    """Small, deliberate bridge between the menu and the football runtime."""
+    """Small, deliberate bridge between the menu and the football runtime.
 
-    def __init__(self) -> None:
-        self.window = None
-
-    def bind_window(self, window: Any) -> None:
-        self.window = window
+    Keep native pywebview objects out of the js_api instance. pywebview inspects
+    public attributes on that object when exposing the API to JavaScript; storing
+    the Window there makes it recursively walk WinForms/WebView2 COM objects.
+    """
 
     def runtime_state(self) -> Dict[str, Any]:
         summary = runtime.runtime_summary()
@@ -57,26 +57,28 @@ class CentellaApi:
         return {"ok": ok, "message": message}
 
     def toggle_fullscreen(self) -> Dict[str, Any]:
-        if self.window is None:
+        if _WINDOW is None:
             return {"ok": False}
-        self.window.toggle_fullscreen()
+        _WINDOW.toggle_fullscreen()
         return {"ok": True}
 
     def close(self) -> Dict[str, Any]:
-        if self.window is None:
+        if _WINDOW is None:
             return {"ok": False}
-        self.window.destroy()
+        _WINDOW.destroy()
         return {"ok": True}
 
 
 def main() -> None:
+    global _WINDOW
+
     if not INDEX_HTML.exists():
         raise FileNotFoundError(f"CENTELLA web frontend missing: {INDEX_HTML}")
 
     import webview
 
     api = CentellaApi()
-    window = webview.create_window(
+    _WINDOW = webview.create_window(
         "CENTELLA Football",
         str(INDEX_HTML),
         js_api=api,
@@ -89,7 +91,6 @@ def main() -> None:
         text_select=False,
         zoomable=False,
     )
-    api.bind_window(window)
     webview.start(debug=False, http_server=True, private_mode=True)
 
 
