@@ -1,0 +1,73 @@
+.v2-shell .integration-chip,
+.external-pitch-credit {
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  font-weight: 800;
+  font-size: 10px;
+}
+
+.external-pitch-shell {
+  position: relative;
+  width: 100%;
+  min-height: 500px;
+  height: clamp(500px, 60vh, 690px);
+  overflow: hidden;
+  border-radius: 28px;
+  border: 1px solid rgba(124, 200, 255, .24);
+  background: radial-gradient(circle at 50% 10%, rgba(34, 149, 255, .16), transparent 34%), #07131a;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.035), 0 26px 80px rgba(0,0,0,.34);
+}
+
+.external-pitch-shell > div:last-child {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.external-pitch-credit {
+  position: absolute;
+  z-index: 20;
+  top: 14px;
+  left: 16px;
+  padding: 7px 10px;
+  border-radius: 999px;
+  color: #b9dcff;
+  background: rgba(2, 8, 18, .78);
+  border: 1px solid rgba(124, 200, 255, .22);
+  backdrop-filter: blur(14px);
+  pointer-events: none;
+}
+
+.v2-shell .integration-chip {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  margin-bottom: 12px;
+  padding: 7px 10px;
+  border-radius: 999px;
+  color: #9fd0ff;
+  background: rgba(11,91,255,.12);
+  border: 1px solid rgba(77,157,255,.28);
+}
+
+.v2-shell .pitch-wrap {
+  min-width: 0;
+}
+
+.v2-shell .bench {
+  margin-top: 12px;
+}
+
+.v2-shell .bench-label {
+  width: 100%;
+  margin-bottom: 8px;
+  color: rgba(255,255,255,.55);
+  font-size: 10px;
+  letter-spacing: .08em;
+}
+
+@media (max-width: 1100px) {
+  .external-pitch-shell {
+    min-height: 430px;
+    height: 52vh;
+  }
+}
