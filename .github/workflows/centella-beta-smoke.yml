@@ -1,0 +1,202 @@
+name: CENTELLA Beta Smoke
+
+on:
+  push:
+    branches:
+      - agent/centella-first-impression
+  workflow_dispatch:
+
+jobs:
+  beta-shell-linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SDL_VIDEODRIVER: dummy
+      SDL_AUDIODRIVER: dummy
+      PYGAME_HIDE_SUPPORT_PROMPT: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install shell dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pygame==2.6.1
+
+      - name: Compile all CENTELLA Python modules
+        run: python -m compileall -q centella
+
+      - name: Import beta modules
+        run: |
+          python - <<'PY'
+          import centella.settings
+          import centella.content
+          import centella.controller
+          import centella.modes
+          import centella.runtime
+          import centella.ui
+          import centella.audio
+          import centella.beta_frontend
+          import centella.product_frontend
+          import centella.cinematic_frontend
+          import centella.release_frontend
+          print('IMPORTS OK')
+          PY
+
+      - name: Validate bundled PNG assets
+        run: |
+          python - <<'PY'
+          import pathlib
+          import pygame
+          pygame.init()
+          pygame.display.set_mode((16, 16))
+          root = pathlib.Path('centella/assets')
+          for path in sorted(root.glob('*.png')):
+              image = pygame.image.load(str(path))
+              assert image.get_width() > 0 and image.get_height() > 0, path
+              print('PNG OK', path, image.get_size())
+          pygame.quit()
+          PY
+
+      - name: Headless release UI render smoke test
+        run: |
+          python - <<'PY'
+          import pygame
+          from centella.release_frontend import App
+          from centella.controller import InputAction
+          from centella.modes import MODES
+
+          app = App()
+          app.render()
+          app.handle_action(InputAction('confirm'))
+          assert app.scene == 'hub'
+          app.render()
+
+          for tab_index in range(5):
+              app.set_tab(tab_index)
+              assert MODES[app.tab_name]
+              app.render()
+
+          scenes = [
+              'quick', 'coop', 'training', 'career', 'street', 'journey',
+              'online', 'edit', 'player', 'tournament', 'setpiece', 'controls',
+              'video', 'access', 'workshop', 'doctor', 'detail', 'prematch'
+          ]
+          for scene in scenes:
+              if scene == 'detail':
+                  app.detail_mode = MODES['PLAY'][5]
+              app.enter(scene)
+              app.render()
+              print('SCENE OK', scene)
+
+          app.set_tab(1)
+          app.open_mode(MODES['PLAY'][0])
+          assert app.scene == 'quick'
+          app.handle_action(InputAction('down'))
+          app.handle_action(InputAction('right'))
+          app.render()
+
+          pygame.quit()
+          print('RELEASE UI SMOKE OK')
+          PY
+
+      - name: Capture release reference frames
+        run: |
+          mkdir -p ui-artifacts
+          python - <<'PY'
+          import pathlib
+          import time
+          import pygame
+          from centella.release_frontend import App
+
+          out = pathlib.Path('ui-artifacts')
+          app = App()
+          app.screen = pygame.display.set_mode((1280, 720))
+          app.viewport.screen = app.screen
+          app.viewport.update()
+
+          def capture(name, scene, setup=None):
+              if setup:
+                  setup()
+              app.enter(scene)
+              app.scene_started = time.perf_counter() - 2.0
+              app.render()
+              path = out / f'{name}.png'
+              pygame.image.save(app.screen, str(path))
+              print('CAPTURED', path)
+
+          capture('01-splash', 'splash')
+          capture('02-home', 'hub', lambda: app.set_tab(0))
+          capture('03-play', 'hub', lambda: app.set_tab(1))
+          capture('04-kickoff', 'quick')
+          capture('05-career', 'career')
+          capture('06-controls', 'controls')
+          capture('07-system', 'doctor')
+          app.pending_coop = False
+          capture('08-prematch', 'prematch')
+          pygame.quit()
+          PY
+
+      - name: Upload UI reference frames
+        uses: actions/upload-artifact@v4
+        with:
+          name: centella-ui-reference-frames
+          path: ui-artifacts/*.png
+          if-no-files-found: error
+          retention-days: 14
+
+  windows-launcher:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    env:
+      SDL_VIDEODRIVER: dummy
+      SDL_AUDIODRIVER: dummy
+      PYGAME_HIDE_SUPPORT_PROMPT: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.10 x64
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          architecture: "x64"
+
+      - name: Reproduce CENTELLA TOOLCHAIN layout
+        shell: powershell
+        run: |
+          $python = (Get-Command python).Source
+          $pythonRoot = Split-Path -Parent $python
+          $workspaceRoot = Split-Path -Parent $env:GITHUB_WORKSPACE
+          $toolchainRoot = Join-Path $workspaceRoot "TOOLCHAIN"
+          $pythonLink = Join-Path $toolchainRoot "Python310"
+          New-Item -ItemType Directory -Force $toolchainRoot | Out-Null
+          if (Test-Path $pythonLink) { Remove-Item $pythonLink -Recurse -Force }
+          New-Item -ItemType Junction -Path $pythonLink -Target $pythonRoot | Out-Null
+          Write-Host "TOOLCHAIN Python310 -> $pythonRoot"
+          & "$pythonLink\python.exe" --version
+
+      - name: Force the missing-pygame first-run case
+        shell: powershell
+        run: |
+          $workspaceRoot = Split-Path -Parent $env:GITHUB_WORKSPACE
+          $python = Join-Path $workspaceRoot "TOOLCHAIN\Python310\python.exe"
+          & $python -m pip uninstall -y pygame
+          & $python -c "import importlib.util; assert importlib.util.find_spec('pygame') is None; print('pygame intentionally absent')"
+
+      - name: Windows launcher self-heal check
+        shell: powershell
+        run: .\scripts\RUN_BETA.ps1 -CheckOnly
+
+      - name: Verify pygame was installed into TOOLCHAIN Python
+        shell: powershell
+        run: |
+          $workspaceRoot = Split-Path -Parent $env:GITHUB_WORKSPACE
+          $python = Join-Path $workspaceRoot "TOOLCHAIN\Python310\python.exe"
+          & $python -c "import pygame, centella.release_frontend, centella.runtime; print('WINDOWS TOOLCHAIN IMPORTS OK', pygame.version.ver)"
+
+      - name: Test the public BAT launcher wrapper
+        shell: cmd
+        run: RUN_CENTELLA_BETA.bat -CheckOnly

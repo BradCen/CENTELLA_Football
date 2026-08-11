@@ -6,6 +6,9 @@ recursive-include gfootball/examples *
 
 include Dockerfile Dockerfile_examples .dockerignore CHANGELOG CONTRIBUTING.md requirements.txt run_docker_test.sh
 
+recursive-include centella/assets *.png
+recursive-include docs *.md
+
 recursive-include third_party/fonts *
 recursive-include third_party/gfootball_engine *
 recursive-exclude third_party/gfootball_engine *.a *.so cmake_install.cmake Makefile

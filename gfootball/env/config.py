@@ -12,15 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 """Config loader."""
 
 from __future__ import print_function
 
 import copy
-import tempfile
 import os
 import platform
+import tempfile
 
 from absl import flags
 
@@ -28,22 +27,13 @@ import gfootball_engine as libgame
 
 FLAGS = flags.FLAGS
 
+
 def parse_player_definition(definition):
-  """Parses player definition.
-
-  An example of player definition is: "agent:players=4" or "replay:path=...".
-
-  Args:
-    definition: a string defining a player
-
-  Returns:
-    A tuple (name, dict).
-  """
+  """Parses a player definition such as ``agent:players=4``."""
   name = definition
-  d = {'left_players': 0,
-       'right_players': 0}
+  d = {'left_players': 0, 'right_players': 0}
   if ':' in definition:
-    # Windows requires special handling of replays, because path may contain ':'
+    # Windows requires special handling of replay paths because they contain ':'.
     if platform.system() == 'Windows' and definition.startswith('replay:') \
         and len(definition.split(':')) > 2:
       (name, params) = 'replay', definition.split('replay:')[-1]
@@ -58,24 +48,20 @@ def parse_player_definition(definition):
 
 
 def count_players(definition):
-  """Returns a number of players given a definition."""
   _, player_definition = parse_player_definition(definition)
   return (int(player_definition['left_players']) +
           int(player_definition['right_players']))
 
 
 def count_left_players(definition):
-  """Returns a number of left players given a definition."""
   return int(parse_player_definition(definition)[1]['left_players'])
 
 
 def count_right_players(definition):
-  """Returns a number of players given a definition."""
   return int(parse_player_definition(definition)[1]['right_players'])
 
 
 def get_agent_number_of_players(players):
-  """Returns a total number of players controlled by an agent."""
   return sum([count_players(player) for player in players
               if player.startswith('agent')])
 
@@ -103,6 +89,11 @@ class Config(object):
         0.5625 * self._values['render_resolution_x'])
     if values:
       self._values.update(values)
+      # CENTELLA can change native render width dynamically. Keep the original
+      # 16:9 behavior unless a caller explicitly supplied a custom height.
+      if 'render_resolution_x' in values and 'render_resolution_y' not in values:
+        self._values['render_resolution_y'] = int(
+            0.5625 * self._values['render_resolution_x'])
     self.NewScenario()
 
   def number_of_left_players(self):
@@ -140,7 +131,6 @@ class Config(object):
     return cfg
 
   def set_scenario_value(self, key, value):
-    """Override value of specific config key for a single episode."""
     self._scenario_values[key] = value
 
   def serialize(self):
@@ -148,11 +138,14 @@ class Config(object):
 
   def update(self, config):
     self._values.update(config)
+    if 'render_resolution_x' in config and 'render_resolution_y' not in config:
+      self._values['render_resolution_y'] = int(
+          0.5625 * self._values['render_resolution_x'])
 
   def ScenarioConfig(self):
     return self._scenario_cfg
 
-  def NewScenario(self, inc = 1):
+  def NewScenario(self, inc=1):
     if 'episode_number' not in self._values:
       self._values['episode_number'] = 0
     self._values['episode_number'] += inc

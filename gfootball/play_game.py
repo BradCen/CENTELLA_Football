@@ -12,17 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Script allowing humans to play Google Research Football.
 
-"""Script allowing to play the game by multiple players."""
+CENTELLA additions keep the original entry point compatible while exposing
+product-facing render, cadence, duration and AI-difficulty controls.
+"""
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
+from __future__ import absolute_import, division, print_function
 
 from absl import app
 from absl import flags
 from absl import logging
-
 
 from gfootball.env import config
 from gfootball.env import football_env
@@ -30,27 +30,42 @@ from gfootball.env import football_env
 FLAGS = flags.FLAGS
 
 flags.DEFINE_string('players', 'keyboard:left_players=1',
-                    'Semicolon separated list of players, single keyboard '
-                    'player on the left by default')
+                    'Semicolon separated player definitions.')
 flags.DEFINE_string('level', '', 'Level to play')
 flags.DEFINE_enum('action_set', 'default', ['default', 'full'], 'Action set')
 flags.DEFINE_bool('real_time', True,
                   'If true, environment will slow down so humans can play.')
 flags.DEFINE_bool('render', True, 'Whether to do game rendering.')
+flags.DEFINE_integer('render_resolution_x', 1280,
+                     'Horizontal native render resolution. Height keeps 16:9.')
+flags.DEFINE_integer('physics_steps_per_frame', 10,
+                     'Native physics steps grouped before the next environment action.')
+flags.DEFINE_integer('game_duration', 0,
+                     'Optional scenario duration override in environment ticks; 0 keeps scenario default.')
+flags.DEFINE_float('right_team_difficulty', -1.0,
+                   'Optional built-in AI difficulty override in [0, 1]; negative keeps scenario default.')
 
 
 def main(_):
   players = FLAGS.players.split(';') if FLAGS.players else ''
-  assert not (any(['agent' in player for player in players])
-             ), ('Player type \'agent\' can not be used with play_game.')
+  assert not any(['agent' in player for player in players]), (
+      'Player type \'agent\' can not be used with play_game.')
   cfg_values = {
       'action_set': FLAGS.action_set,
       'dump_full_episodes': True,
       'players': players,
       'real_time': FLAGS.real_time,
+      'render_resolution_x': max(640, int(FLAGS.render_resolution_x)),
+      'physics_steps_per_frame': max(1, min(20, int(FLAGS.physics_steps_per_frame))),
   }
   if FLAGS.level:
     cfg_values['level'] = FLAGS.level
+  if FLAGS.game_duration > 0:
+    cfg_values['game_duration_override'] = int(FLAGS.game_duration)
+  if FLAGS.right_team_difficulty >= 0.0:
+    cfg_values['right_team_difficulty_override'] = max(
+        0.0, min(1.0, float(FLAGS.right_team_difficulty)))
+
   cfg = config.Config(cfg_values)
   env = football_env.FootballEnv(cfg)
   if FLAGS.render:
@@ -64,7 +79,8 @@ def main(_):
   except KeyboardInterrupt:
     logging.warning('Game stopped, writing dump...')
     env.write_dump('shutdown')
-    exit(1)
+  finally:
+    env.close()
 
 
 if __name__ == '__main__':

@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>CENTELLA Football</title>
+  <link rel="stylesheet" href="game-ui.css">
+  <link rel="stylesheet" href="centella-experience.css">
+</head>
+<body>
+  <div id="introScreen" class="intro-screen">
+    <div class="intro-bg"></div>
+    <div class="intro-scan"></div>
+    <div class="intro-content">
+      <div class="bolt" aria-hidden="true">ϟ</div>
+      <h1>CENTELLA</h1>
+      <p>FOOTBALL 27</p>
+      <button id="continueButton">PRESIONA CUALQUIER BOTÓN</button>
+      <small id="continueDevice">TECLADO · XBOX · PLAYSTATION</small>
+    </div>
+  </div>
+
+  <main id="gameShell" class="game-shell">
+    <div class="world-bg" aria-hidden="true"><div class="lights"></div><div class="crowd"></div><div class="grass"></div></div>
+    <header class="topbar">
+      <button class="brand" data-screen="play" aria-label="CENTELLA Football">
+        <b aria-hidden="true">ϟ</b>
+        <span>CENTELLA<small>FOOTBALL</small></span>
+      </button>
+      <nav id="mainNav" aria-label="Modos principales">
+        <button data-screen="play" class="active">JUGAR</button>
+        <button data-screen="master">LIGA MÁSTER</button>
+        <button data-screen="competitions">COMPETICIONES</button>
+        <button data-screen="training">ENTRENAR</button>
+        <button data-screen="customize">PERSONALIZAR</button>
+      </nav>
+      <div class="top-actions">
+        <span id="enginePill" class="engine-pill">MOTOR · …</span>
+        <button id="fullscreenButton" aria-label="Pantalla completa">⛶</button>
+        <button id="closeButton" aria-label="Cerrar">×</button>
+      </div>
+    </header>
+
+    <section id="screen" class="screen" aria-live="polite"></section>
+
+    <footer class="footer">
+      <div><kbd>←↑↓→</kbd> MOVER <kbd>ENTER</kbd> SELECCIONAR <kbd>ESC</kbd> VOLVER</div>
+      <div><kbd>Q/E</kbd> PESTAÑAS <span id="runtimeLabel">MOTOR · COMPROBANDO</span></div>
+    </footer>
+    <div id="toast" class="toast"></div>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>
