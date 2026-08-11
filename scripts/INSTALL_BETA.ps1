@@ -31,27 +31,92 @@ function Find-Python310 {
     return $null
 }
 
+function Test-ZipFile([string]$Path) {
+    if (-not (Test-Path $Path)) { return $false }
+    $item = Get-Item $Path -ErrorAction SilentlyContinue
+    if (-not $item -or $item.Length -lt 10000) { return $false }
+    try {
+        $stream = [System.IO.File]::OpenRead($Path)
+        try {
+            $b1 = $stream.ReadByte()
+            $b2 = $stream.ReadByte()
+            return ($b1 -eq 0x50 -and $b2 -eq 0x4B)
+        } finally {
+            $stream.Dispose()
+        }
+    } catch {
+        return $false
+    }
+}
+
 function Ensure-PkgConfig {
     $existing = Get-Command pkg-config.exe -ErrorAction SilentlyContinue
-    if ($existing) { return $existing.Source }
+    if ($existing) {
+        Write-Host "pkg-config existente: $($existing.Source)" -ForegroundColor Green
+        return $existing.Source
+    }
 
     New-Item -ItemType Directory -Force $PkgConfigRoot | Out-Null
     $localExe = Get-ChildItem $PkgConfigRoot -Filter "pkg-config.exe" -Recurse -File -ErrorAction SilentlyContinue |
         Select-Object -First 1
-    if (-not $localExe) {
-        Write-Host "Preparando pkg-config compatible para el vcpkg histórico..." -ForegroundColor Yellow
-        $zip = Join-Path $ToolchainRoot "pkg-config-lite-0.28-1.zip"
-        $url = "https://downloads.sourceforge.net/project/pkgconfiglite/0.28-1/pkg-config-lite-0.28-1_bin-win32.zip"
-        Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing
-        if (-not (Test-Path $zip)) { throw "No se pudo descargar pkg-config." }
-        if (Test-Path $PkgConfigRoot) { Remove-Item $PkgConfigRoot -Recurse -Force }
-        New-Item -ItemType Directory -Force $PkgConfigRoot | Out-Null
-        Expand-Archive -Path $zip -DestinationPath $PkgConfigRoot -Force
-        Remove-Item $zip -Force -ErrorAction SilentlyContinue
-        $localExe = Get-ChildItem $PkgConfigRoot -Filter "pkg-config.exe" -Recurse -File -ErrorAction SilentlyContinue |
-            Select-Object -First 1
+    if ($localExe) { return $localExe.FullName }
+
+    Write-Host "Preparando pkg-config compatible para el vcpkg histórico..." -ForegroundColor Yellow
+
+    # Prefer the same Chocolatey package used by GitHub Actions when Chocolatey
+    # already exists on the machine. This avoids SourceForge redirect/download
+    # pages being saved as if they were ZIP files.
+    $choco = Get-Command choco.exe -ErrorAction SilentlyContinue
+    if ($choco) {
+        Write-Host "Intentando pkgconfiglite mediante Chocolatey..." -ForegroundColor DarkGray
+        & $choco.Source install pkgconfiglite -y --no-progress
+        if ($LASTEXITCODE -eq 0) {
+            $chocoBin = Join-Path $env:ChocolateyInstall "bin"
+            if (Test-Path $chocoBin) { $env:PATH = "$chocoBin;$env:PATH" }
+            $installed = Get-Command pkg-config.exe -ErrorAction SilentlyContinue
+            if ($installed) {
+                Write-Host "pkg-config instalado: $($installed.Source)" -ForegroundColor Green
+                return $installed.Source
+            }
+        }
+        Write-Host "Chocolatey no dejó pkg-config disponible; usando descarga directa verificada..." -ForegroundColor Yellow
     }
+
+    $zip = Join-Path $ToolchainRoot "pkg-config-lite-0.28-1.zip"
+    Remove-Item $zip -Force -ErrorAction SilentlyContinue
+    if (Test-Path $PkgConfigRoot) { Remove-Item $PkgConfigRoot -Recurse -Force }
+    New-Item -ItemType Directory -Force $PkgConfigRoot | Out-Null
+
+    $url = "https://sourceforge.net/projects/pkgconfiglite/files/0.28-1/pkg-config-lite-0.28-1_bin-win32.zip/download"
+    $curl = Get-Command curl.exe -ErrorAction SilentlyContinue
+    if ($curl) {
+        & $curl.Source -L --fail --retry 3 --retry-delay 2 --connect-timeout 20 -A "Mozilla/5.0" -o $zip $url
+        if ($LASTEXITCODE -ne 0) { Remove-Item $zip -Force -ErrorAction SilentlyContinue }
+    }
+
+    if (-not (Test-ZipFile $zip)) {
+        Remove-Item $zip -Force -ErrorAction SilentlyContinue
+        Write-Host "curl no obtuvo un ZIP válido; reintentando con PowerShell..." -ForegroundColor Yellow
+        Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing -MaximumRedirection 10 -Headers @{ "User-Agent" = "Mozilla/5.0" }
+    }
+
+    if (-not (Test-ZipFile $zip)) {
+        Remove-Item $zip -Force -ErrorAction SilentlyContinue
+        throw "La descarga de pkg-config no produjo un ZIP válido. No se intentará descomprimir HTML o un archivo incompleto."
+    }
+
+    try {
+        Expand-Archive -Path $zip -DestinationPath $PkgConfigRoot -Force
+    } catch {
+        Remove-Item $zip -Force -ErrorAction SilentlyContinue
+        throw "pkg-config se descargó pero el ZIP no pudo abrirse: $($_.Exception.Message)"
+    }
+    Remove-Item $zip -Force -ErrorAction SilentlyContinue
+
+    $localExe = Get-ChildItem $PkgConfigRoot -Filter "pkg-config.exe" -Recurse -File -ErrorAction SilentlyContinue |
+        Select-Object -First 1
     if (-not $localExe) { throw "pkg-config.exe no pudo prepararse." }
+    Write-Host "pkg-config local: $($localExe.FullName)" -ForegroundColor Green
     return $localExe.FullName
 }
 
