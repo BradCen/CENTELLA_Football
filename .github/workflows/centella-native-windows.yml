@@ -50,6 +50,7 @@ jobs:
             $pkg = Get-Command pkg-config.exe -ErrorAction SilentlyContinue
           }
           if (-not $pkg) { throw 'pkg-config.exe is not available' }
+          "CENTELLA_PKG_CONFIG=$($pkg.Source)" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
           Write-Host "pkg-config: $($pkg.Source)"
           & $pkg.Source --version
 
@@ -62,6 +63,22 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'vcpkg clone failed' }
           git -C $root checkout $baseline
           if ($LASTEXITCODE -ne 0) { throw 'vcpkg baseline checkout failed' }
+
+          # The 2021 vcpkg helper unconditionally downloads an old i686 MSYS2
+          # pkg-config package that has disappeared from every mirror. CENTELLA
+          # already provides a working pkg-config above, so pin that executable
+          # into the legacy helper instead of allowing the dead download path.
+          $fixup = Join-Path $root 'scripts\cmake\vcpkg_fixup_pkgconfig.cmake'
+          $text = Get-Content $fixup -Raw
+          $old = 'vcpkg_find_acquire_program(PKGCONFIG)'
+          if (-not $text.Contains($old)) { throw 'legacy pkg-config acquisition hook not found' }
+          $pkgPath = $env:CENTELLA_PKG_CONFIG.Replace('\', '/')
+          $new = "set(PKGCONFIG `"$pkgPath`")"
+          $text = $text.Replace($old, $new)
+          Set-Content -Path $fixup -Value $text -Encoding utf8
+          Write-Host 'Patched legacy vcpkg pkg-config acquisition:'
+          Select-String -Path $fixup -Pattern 'set\(PKGCONFIG'
+
           & (Join-Path $root 'bootstrap-vcpkg.bat') -disableMetrics
           if ($LASTEXITCODE -ne 0) { throw 'vcpkg bootstrap failed' }
           "VCPKG_ROOT=$root" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
