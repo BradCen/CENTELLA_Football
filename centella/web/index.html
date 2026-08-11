@@ -1,152 +1,40 @@
 <!doctype html>
 <html lang="es">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>CENTELLA Football</title>
-  <link rel="stylesheet" href="styles.css" />
-  <link rel="stylesheet" href="game-ui.css" />
+  <link rel="stylesheet" href="game-ui.css">
 </head>
 <body>
-  <div id="introScreen" class="intro-screen" aria-label="Pantalla de inicio">
-    <div class="intro-stadium" aria-hidden="true"></div>
-    <div class="intro-lights" aria-hidden="true"><span class="intro-light"></span><span class="intro-light"></span></div>
-    <div class="intro-content">
-      <div class="intro-bolt">ϟ</div>
-      <h1 class="intro-title">CENTELLA</h1>
-      <div class="intro-sub">FOOTBALL</div>
-      <button id="continueButton" class="continue-prompt">PRESIONA CUALQUIER BOTÓN PARA CONTINUAR</button>
-      <div id="continueDevice" class="continue-device">TECLADO · XBOX · PLAYSTATION</div>
+  <div id="introScreen" class="intro-screen">
+    <div class="intro-bg"></div><div class="intro-scan"></div>
+    <div class="intro-content"><div class="bolt">ϟ</div><h1>CENTELLA</h1><p>FOOTBALL</p>
+      <button id="continueButton">PRESIONA CUALQUIER BOTÓN</button><small id="continueDevice">TECLADO · XBOX · PLAYSTATION</small>
     </div>
   </div>
 
-  <main class="shell">
-    <div class="atmosphere" aria-hidden="true">
-      <div class="stadium-glow stadium-glow--left"></div>
-      <div class="stadium-glow stadium-glow--right"></div>
-      <div class="pitch-lines"></div>
-      <div class="grain"></div>
-    </div>
-
+  <main id="gameShell" class="game-shell">
+    <div class="world-bg"><div class="lights"></div><div class="crowd"></div><div class="grass"></div></div>
     <header class="topbar">
-      <a class="brand" href="#" aria-label="CENTELLA Football">
-        <span class="brand-mark">ϟ</span>
-        <span class="brand-copy"><strong>CENTELLA</strong><small>FOOTBALL</small></span>
-      </a>
-      <nav class="nav" aria-label="Navegación principal">
-        <button class="nav-item active" data-view="home" data-focusable>JUGAR</button>
-        <button class="nav-item" data-view="kickoff" data-focusable>PARTIDO RÁPIDO</button>
-        <button class="nav-item" data-view="career" data-focusable>LIGA MÁSTER 2.0</button>
-        <button class="nav-item" data-view="tournaments" data-focusable>TORNEOS</button>
-        <button class="nav-item" data-view="training" data-focusable>ENTRENAMIENTO</button>
+      <button class="brand" data-screen="play"><b>ϟ</b><span>CENTELLA<small>FOOTBALL</small></span></button>
+      <nav id="mainNav">
+        <button data-screen="play" class="active">JUGAR</button>
+        <button data-screen="master">LIGA MÁSTER</button>
+        <button data-screen="competitions">COMPETICIONES</button>
+        <button data-screen="training">ENTRENAR</button>
+        <button data-screen="customize">PERSONALIZAR</button>
       </nav>
-      <div class="nav-shoulder-help"><b>L1 / LB</b> CAMBIAR PESTAÑA <b>R1 / RB</b></div>
-      <div class="top-actions">
-        <span id="engineDot" class="engine-dot" title="Estado del motor"></span>
-        <button id="fullscreenButton" class="icon-button" title="Pantalla completa" data-focusable>⛶</button>
-        <button id="closeButton" class="icon-button close" title="Cerrar" data-focusable>×</button>
-      </div>
+      <div class="top-actions"><span id="enginePill" class="engine-pill">MOTOR · …</span><button id="fullscreenButton">⛶</button><button id="closeButton">×</button></div>
     </header>
 
-    <section id="home" class="view active-view">
-      <div class="hero-copy">
-        <p class="eyebrow"><span></span> CENTELLA MATCHDAY</p>
-        <h1>VIVE EL<br><em>FÚTBOL.</em></h1>
-        <p class="lead">Sal al campo, construye tu club o compite. Sin pantallas de laboratorio dentro de la experiencia de juego.</p>
-        <div class="hero-actions">
-          <button class="primary-cta" data-go="kickoff" data-focusable><span>PARTIDO RÁPIDO</span><b>→</b></button>
-          <button class="ghost-cta" data-go="career" data-focusable>LIGA MÁSTER</button>
-        </div>
-      </div>
+    <section id="screen" class="screen" aria-live="polite"></section>
 
-      <div class="hero-visual" aria-hidden="true">
-        <div class="stadium-scene">
-          <div class="floodlight left"></div><div class="floodlight right"></div>
-          <div class="stadium-stand"></div><div class="stadium-crowd"></div>
-          <div class="stadium-pitch"></div><div class="stadium-goal"></div><div class="stadium-ball"></div>
-        </div>
-      </div>
-
-      <aside class="match-card">
-        <div class="card-kicker">SIGUIENTE PARTIDO</div>
-        <div class="mini-versus">
-          <div><span class="crest crest-blue">C</span><strong>CENTELLA</strong></div>
-          <b>VS</b>
-          <div><span class="crest crest-white">V</span><strong>VISITANTE</strong></div>
-        </div>
-        <button data-go="kickoff" data-focusable>CONFIGURAR PARTIDO <span>→</span></button>
-      </aside>
-
-      <div class="mode-strip" aria-label="Modos de juego">
-        <button class="mode-card" data-go="kickoff" data-focusable><small>01</small><strong>PARTIDO RÁPIDO</strong></button>
-        <button class="mode-card" data-go="career" data-focusable><small>02</small><strong>LIGA MÁSTER 2.0</strong></button>
-        <button class="mode-card" data-go="tournaments" data-focusable><small>03</small><strong>TORNEOS</strong></button>
-        <button class="mode-card" data-go="training" data-focusable><small>04</small><strong>ENTRENAMIENTO</strong></button>
-        <button class="mode-card" data-action="coop" data-focusable><small>05</small><strong>CO-OP LOCAL</strong></button>
-      </div>
-    </section>
-
-    <section id="kickoff" class="view kickoff-view">
-      <div class="section-heading">
-        <p class="eyebrow"><span></span> PARTIDO RÁPIDO</p>
-        <h2>ELIGE TU LADO</h2>
-        <p>Configura el partido y sal al campo.</p>
-      </div>
-      <div class="versus-stage">
-        <article class="team team-home selected" data-focusable tabindex="0">
-          <div class="team-label">LOCAL</div><div class="large-crest crest-blue">C</div><h3>CENTELLA FC</h3><p>AZUL ELÉCTRICO</p>
-          <div class="team-meta"><span>ATA 81</span><span>MED 79</span><span>DEF 80</span></div>
-        </article>
-        <div class="versus-center">
-          <span class="match-type">EXHIBICIÓN</span><strong>VS</strong>
-          <div class="difficulty"><small>DIFICULTAD</small><b>PROFESIONAL</b></div>
-          <button id="playButton" class="primary-cta play-cta" data-focusable><span>INICIAR PARTIDO</span><b>▶</b></button>
-          <p id="playStatus" class="play-status">Comprobando motor…</p>
-        </div>
-        <article class="team team-away" data-focusable tabindex="0">
-          <div class="team-label">VISITANTE</div><div class="large-crest crest-white">V</div><h3>VOLT UNITED</h3><p>BLANCO / NEGRO</p>
-          <div class="team-meta"><span>ATA 80</span><span>MED 80</span><span>DEF 79</span></div>
-        </article>
-      </div>
-      <button class="back-button" data-go="home" data-focusable>← VOLVER</button>
-    </section>
-
-    <section id="career" class="view training-view">
-      <div class="section-heading"><p class="eyebrow"><span></span> LIGA MÁSTER 2.0</p><h2>CONSTRUYE TU CLUB.</h2><p>Dirección técnica, presidencia, mercado, cantera, finanzas y estadio.</p></div>
-      <div class="training-list">
-        <button class="training-tile active" data-focusable><small>01</small><strong>DIRECTOR TÉCNICO</strong><span>Plantilla, táctica y resultados</span></button>
-        <button class="training-tile" data-focusable><small>02</small><strong>PRESIDENTE</strong><span>Finanzas, infraestructura y mercado</span></button>
-        <button class="training-tile" data-focusable><small>03</small><strong>CONTROL TOTAL</strong><span>Todo el club bajo tu mando</span></button>
-      </div>
-      <div class="training-footer"><button class="back-button" data-go="home" data-focusable>← VOLVER</button><button class="primary-cta" data-action="career" data-focusable><span>NUEVA LIGA MÁSTER</span><b>→</b></button></div>
-    </section>
-
-    <section id="tournaments" class="view training-view">
-      <div class="section-heading"><p class="eyebrow"><span></span> COMPETICIÓN</p><h2>TORNEOS.</h2><p>Elige una estructura y pelea por el título.</p></div>
-      <div class="training-list">
-        <button class="training-tile active" data-focusable><small>01</small><strong>COPA</strong><span>Eliminación directa</span></button>
-        <button class="training-tile" data-focusable><small>02</small><strong>LIGA</strong><span>Temporada todos contra todos</span></button>
-        <button class="training-tile" data-focusable><small>03</small><strong>TORNEO PERSONALIZADO</strong><span>Configura participantes y formato</span></button>
-      </div>
-      <div class="training-footer"><button class="back-button" data-go="home" data-focusable>← VOLVER</button><button class="primary-cta" data-action="tournament" data-focusable><span>CONTINUAR</span><b>→</b></button></div>
-    </section>
-
-    <section id="training" class="view training-view">
-      <div class="section-heading"><p class="eyebrow"><span></span> ENTRENAMIENTO</p><h2>TOCA EL BALÓN.</h2><p>Sesiones para dominar los controles antes del partido.</p></div>
-      <div class="training-list">
-        <button class="training-tile active" data-focusable><small>01</small><strong>LIBRE</strong><span>Movimiento, pase y disparo</span></button>
-        <button class="training-tile" data-focusable><small>02</small><strong>ATAQUE</strong><span>Finalización y uno contra uno</span></button>
-        <button class="training-tile" data-focusable><small>03</small><strong>POSESIÓN</strong><span>Circulación y presión</span></button>
-      </div>
-      <div class="training-footer"><button class="back-button" data-go="home" data-focusable>← VOLVER</button><button id="trainingPlayButton" class="primary-cta" data-focusable><span>ENTRAR AL CAMPO</span><b>▶</b></button></div>
-    </section>
-
-    <footer id="footerHints" class="footer-hints">
-      <span class="keyboard-hint"><kbd>↑↓←→</kbd> MOVER</span><span class="keyboard-hint"><kbd>ENTER</kbd> SELECCIONAR</span><span class="keyboard-hint"><kbd>ESC</kbd> VOLVER</span>
-      <span class="controller-hint"><i class="controller-glyph" id="acceptGlyph">A</i> SELECCIONAR</span><span class="controller-hint"><i class="controller-glyph" id="backGlyph">B</i> VOLVER</span><span class="controller-hint"><i class="controller-glyph shoulder-glyph" id="shoulderGlyph">LB/RB</i> PESTAÑAS</span>
-      <span id="runtimeLabel">MOTOR · COMPROBANDO</span>
+    <footer class="footer">
+      <div><kbd>←↑↓→</kbd> MOVER <kbd>ENTER</kbd> SELECCIONAR <kbd>ESC</kbd> VOLVER</div>
+      <div><kbd>Q/E</kbd> PESTAÑAS <span id="runtimeLabel">MOTOR · COMPROBANDO</span></div>
     </footer>
-    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <div id="toast" class="toast"></div>
   </main>
   <script src="app.js"></script>
 </body>
