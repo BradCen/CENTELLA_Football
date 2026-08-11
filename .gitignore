@@ -34,3 +34,7 @@ cmake_install.cmake
 .vscode/
 .venv/
 __pycache__/
+
+# React/Vite UI generated locally
+centella/ui/node_modules/
+centella/web-react/
