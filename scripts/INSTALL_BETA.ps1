@@ -6,6 +6,7 @@ $WorkspaceRoot = Split-Path -Parent $ProjectRoot
 $ToolchainRoot = Join-Path $WorkspaceRoot "TOOLCHAIN"
 $Cache = Join-Path $ToolchainRoot "vcpkg_cache"
 $CentellaVcpkg = Join-Path $ToolchainRoot "vcpkg-centella"
+$PkgConfigRoot = Join-Path $ToolchainRoot "pkgconfiglite"
 $VcpkgBaseline = "b18b17865cfb6bd24620a00f30691be6775abb96"
 
 function Find-Python310 {
@@ -30,6 +31,46 @@ function Find-Python310 {
     return $null
 }
 
+function Ensure-PkgConfig {
+    $existing = Get-Command pkg-config.exe -ErrorAction SilentlyContinue
+    if ($existing) { return $existing.Source }
+
+    New-Item -ItemType Directory -Force $PkgConfigRoot | Out-Null
+    $localExe = Get-ChildItem $PkgConfigRoot -Filter "pkg-config.exe" -Recurse -File -ErrorAction SilentlyContinue |
+        Select-Object -First 1
+    if (-not $localExe) {
+        Write-Host "Preparando pkg-config compatible para el vcpkg histórico..." -ForegroundColor Yellow
+        $zip = Join-Path $ToolchainRoot "pkg-config-lite-0.28-1.zip"
+        $url = "https://downloads.sourceforge.net/project/pkgconfiglite/0.28-1/pkg-config-lite-0.28-1_bin-win32.zip"
+        Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing
+        if (-not (Test-Path $zip)) { throw "No se pudo descargar pkg-config." }
+        if (Test-Path $PkgConfigRoot) { Remove-Item $PkgConfigRoot -Recurse -Force }
+        New-Item -ItemType Directory -Force $PkgConfigRoot | Out-Null
+        Expand-Archive -Path $zip -DestinationPath $PkgConfigRoot -Force
+        Remove-Item $zip -Force -ErrorAction SilentlyContinue
+        $localExe = Get-ChildItem $PkgConfigRoot -Filter "pkg-config.exe" -Recurse -File -ErrorAction SilentlyContinue |
+            Select-Object -First 1
+    }
+    if (-not $localExe) { throw "pkg-config.exe no pudo prepararse." }
+    return $localExe.FullName
+}
+
+function Patch-LegacyVcpkgPkgConfig([string]$VcpkgRoot, [string]$PkgConfigExe) {
+    $fixup = Join-Path $VcpkgRoot "scripts\cmake\vcpkg_fixup_pkgconfig.cmake"
+    if (-not (Test-Path $fixup)) { throw "No existe vcpkg_fixup_pkgconfig.cmake en el toolchain histórico." }
+    $text = Get-Content $fixup -Raw
+    $old = "vcpkg_find_acquire_program(PKGCONFIG)"
+    $escaped = $PkgConfigExe.Replace("\", "/")
+    $new = "set(PKGCONFIG `"$escaped`")"
+    if ($text.Contains($old)) {
+        $text = $text.Replace($old, $new)
+        Set-Content -Path $fixup -Value $text -Encoding utf8
+    } elseif (-not $text.Contains($new)) {
+        throw "No se encontró el hook esperado de pkg-config en vcpkg histórico."
+    }
+    Write-Host "vcpkg histórico usará pkg-config: $PkgConfigExe" -ForegroundColor Green
+}
+
 function Prepare-CentellaVcpkg {
     $git = Get-Command git -ErrorAction SilentlyContinue
     if (-not $git) { throw "Git es necesario para preparar el toolchain reproducible de CENTELLA." }
@@ -48,6 +89,11 @@ function Prepare-CentellaVcpkg {
     if ($LASTEXITCODE -ne 0) { throw "No se pudo actualizar el repositorio vcpkg aislado." }
     git -C $CentellaVcpkg checkout --force $VcpkgBaseline
     if ($LASTEXITCODE -ne 0) { throw "No se pudo seleccionar el baseline vcpkg de CENTELLA." }
+
+    $pkgConfig = Ensure-PkgConfig
+    Patch-LegacyVcpkgPkgConfig $CentellaVcpkg $pkgConfig
+    $pkgDir = Split-Path -Parent $pkgConfig
+    $env:PATH = "$pkgDir;$env:PATH"
 
     & (Join-Path $CentellaVcpkg "bootstrap-vcpkg.bat") -disableMetrics
     if ($LASTEXITCODE -ne 0) { throw "No se pudo preparar vcpkg." }
