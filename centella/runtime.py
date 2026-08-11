@@ -6,7 +6,7 @@ import subprocess
 import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from .settings import SETTINGS
 
@@ -146,8 +146,10 @@ def _difficulty_value(name: str) -> float:
     return {
         "AMATEUR": 0.12,
         "PROFESSIONAL": 0.60,
+        "PROFESIONAL": 0.60,
         "TOP PLAYER": 0.82,
         "LEGEND": 0.95,
+        "LEYENDA": 0.95,
     }.get(str(name).upper(), 0.60)
 
 
@@ -157,13 +159,15 @@ def launch_match(
     controller_count: int = 0,
     local_players: int = 1,
     versus: bool = False,
+    match_config: Optional[Dict[str, Any]] = None,
 ) -> Tuple[bool, str]:
     engine_python = preferred_engine_python()
     if engine_python is None:
-        return False, "MOTOR NO PREPARADO. ABRE CENTELLA LAB Y EJECUTA INSTALAR/REPARAR."
+        return False, "MOTOR NATIVO NO CARGADO. CENTELLA NO PUEDE ENTRAR AL CAMPO TODAVÍA."
     if local_players > 1 and controller_count < 2:
         return False, "CO-OP LOCAL REQUIERE DOS MANDOS."
 
+    config = dict(match_config or {})
     player_spec = _player_spec(controller_count, local_players, versus)
     width = int(SETTINGS.get("display.width", 1600))
     render_scale = float(SETTINGS.get("display.render_scale", 0.75))
@@ -186,11 +190,14 @@ def launch_match(
         # Academy/training scenarios keep their authored duration/difficulty.
         cmd.append(f"--level={level}")
     else:
-        match_minutes = max(1, int(SETTINGS.get("gameplay.match_minutes", 10)))
-        difficulty = _difficulty_value(SETTINGS.get("gameplay.difficulty", "PROFESSIONAL"))
+        try:
+            match_minutes = max(1, int(config.get("minutes", SETTINGS.get("gameplay.match_minutes", 10))))
+        except (TypeError, ValueError):
+            match_minutes = 10
+        difficulty_name = config.get("difficulty", SETTINGS.get("gameplay.difficulty", "PROFESSIONAL"))
+        difficulty = _difficulty_value(str(difficulty_name))
         # Upstream human play reports one action every 100 ms with the default
-        # 10 physics steps. Compensate the duration when the experimental 5-step
-        # cadence is selected so real wall-clock match length stays comparable.
+        # 10 physics steps. Compensate duration when experimental 5-step mode is used.
         duration_ticks = match_minutes * 60 * 10
         if physics_steps != 10:
             duration_ticks = int(duration_ticks * (10.0 / physics_steps))
@@ -202,9 +209,10 @@ def launch_match(
 
     env = os.environ.copy()
     env["CENTELLA_FOOTBALL"] = "1"
+    env["CENTELLA_MATCH_CONFIG"] = json.dumps(config, ensure_ascii=False)
     try:
         subprocess.Popen(cmd, cwd=str(PROJECT_ROOT), env=env)
-        return True, "PARTIDO INICIADO"
+        return True, "PARTIDO INICIADO · 11 VS 11"
     except OSError as exc:
         return False, f"NO SE PUDO INICIAR EL MOTOR: {exc}"
 
