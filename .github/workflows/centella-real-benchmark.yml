@@ -23,6 +23,7 @@ jobs:
         run: |
           set -euxo pipefail
           mkdir -p vision_v1/runtime
+          sha256sum vision_v1/source.part*.b64
           cat vision_v1/source.part*.b64 | tr -d '\n\r ' | base64 -d > /tmp/centella_vision_source.zip
           echo '7cd06cfff028a816dbff9d4601f0ee280b80665179511417231ff60aaaac3d7e  /tmp/centella_vision_source.zip' | sha256sum -c -
           unzip -t /tmp/centella_vision_source.zip
@@ -87,6 +88,7 @@ jobs:
         run: |
           set -euxo pipefail
           mkdir -p vision_v1/runtime
+          sha256sum vision_v1/source.part*.b64
           cat vision_v1/source.part*.b64 | tr -d '\n\r ' | base64 -d > /tmp/centella_vision_source.zip
           echo '7cd06cfff028a816dbff9d4601f0ee280b80665179511417231ff60aaaac3d7e  /tmp/centella_vision_source.zip' | sha256sum -c -
           unzip -t /tmp/centella_vision_source.zip
