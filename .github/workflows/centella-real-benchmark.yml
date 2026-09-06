@@ -1,0 +1,137 @@
+name: CENTELLA Real Match Benchmark
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    name: Build + YouTube smoke test
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Rebuild CENTELLA Vision source
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p vision_v1/runtime
+          cat vision_v1/source.part*.b64 | tr -d '\n\r ' | base64 -d > /tmp/centella_vision_source.zip
+          echo '7cd06cfff028a816dbff9d4601f0ee280b80665179511417231ff60aaaac3d7e  /tmp/centella_vision_source.zip' | sha256sum -c -
+          unzip -t /tmp/centella_vision_source.zip
+          unzip -q /tmp/centella_vision_source.zip -d vision_v1/runtime
+
+      - name: Install dependencies
+        working-directory: vision_v1/runtime
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e '.[youtube,dev]'
+          python -m pip install --upgrade yt-dlp
+
+      - name: Unit tests
+        working-directory: vision_v1/runtime
+        run: pytest -q
+
+      - name: Download a real football clip from YouTube
+        working-directory: vision_v1/runtime
+        run: |
+          python -m centella_football youtube-demo \
+            --url 'https://www.youtube.com/watch?v=Rq4QD4vKjz8' \
+            --start 2118 \
+            --duration 20 \
+            --out input/actions_smoke.mp4 \
+            --download-only
+          test -s input/actions_smoke.mp4
+          ls -lh input/actions_smoke.mp4
+
+      - name: Upload smoke clip/logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: centella-youtube-smoke
+          path: |
+            vision_v1/runtime/input/actions_smoke.mp4
+            vision_v1/runtime/output/
+          if-no-files-found: ignore
+          retention-days: 3
+
+  benchmark:
+    name: Benchmark ${{ matrix.slug }}
+    needs: smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    strategy:
+      fail-fast: false
+      matrix:
+        slug:
+          - argentina-france-2022
+          - france-croatia-2018
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Rebuild CENTELLA Vision source
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p vision_v1/runtime
+          cat vision_v1/source.part*.b64 | tr -d '\n\r ' | base64 -d > /tmp/centella_vision_source.zip
+          echo '7cd06cfff028a816dbff9d4601f0ee280b80665179511417231ff60aaaac3d7e  /tmp/centella_vision_source.zip' | sha256sum -c -
+          unzip -t /tmp/centella_vision_source.zip
+          unzip -q /tmp/centella_vision_source.zip -d vision_v1/runtime
+
+      - name: Install dependencies
+        working-directory: vision_v1/runtime
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e '.[youtube,dev]'
+          python -m pip install --upgrade yt-dlp
+
+      - name: Disable full annotated-video render in CI
+        working-directory: vision_v1/runtime
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('centella_football/cli.py')
+          s = p.read_text(encoding='utf-8')
+          old = '.analyze(str(video),str(out),True)'
+          if old not in s:
+              raise SystemExit('Expected benchmark analyze call not found')
+          s = s.replace(old, '.analyze(str(video),str(out),False)')
+          p.write_text(s, encoding='utf-8')
+          print('CI patch applied: annotation disabled')
+          PY
+
+      - name: Run full-match benchmark
+        working-directory: vision_v1/runtime
+        env:
+          PYTHONUNBUFFERED: '1'
+        run: |
+          mkdir -p output/${{ matrix.slug }}
+          python -m centella_football benchmark '${{ matrix.slug }}' \
+            --out 'output/${{ matrix.slug }}' \
+            --sample-fps 1.5 \
+            --detector torchvision-fast \
+            --tune | tee 'output/${{ matrix.slug }}/actions.log'
+
+      - name: Upload benchmark outputs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: centella-${{ matrix.slug }}
+          path: vision_v1/runtime/output/${{ matrix.slug }}/
+          if-no-files-found: warn
+          retention-days: 7
