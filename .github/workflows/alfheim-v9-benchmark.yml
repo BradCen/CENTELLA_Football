@@ -1,4 +1,4 @@
-name: CENTELLA Alfheim V17 Conservative Tracklet Benchmark
+name: CENTELLA Alfheim V18 Full-Frame ByteTrack Benchmark
 
 on:
   pull_request:
@@ -14,6 +14,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+          cache: 'pip'
       - name: Install CPU runtime
         run: |
           sudo apt-get update -qq
@@ -27,7 +28,7 @@ jobs:
           set -euxo pipefail
           BASE='https://datasets.simula.no/downloads/alfheim/2013-11-03/First%20Half'
           CURL='curl -fkL --connect-timeout 20 --retry 4 --retry-all-errors --retry-delay 2'
-          mkdir -p /tmp/native output/alfheim_v17
+          mkdir -p /tmp/native output/alfheim_v18
           for cam in 0 1 2; do
             mkdir -p "/tmp/native/$cam"
             $CURL "$BASE/$cam/0056_2013-11-03%2018%3A01%3A14.248366000.h264" -o "/tmp/native/$cam/0056.h264"
@@ -38,24 +39,26 @@ jobs:
           done
           $CURL 'https://datasets.simula.no/downloads/alfheim/2013-11-03/zxy/2013-11-03_tromso_stromsgodset_first.csv' -o /tmp/native/truth.csv
           test -s /tmp/native/truth.csv
-      - name: Run CENTELLA V17 benchmark
+      - name: Run CENTELLA V18 benchmark
         env:
           PYTHONUNBUFFERED: '1'
         run: |
-          python vision_v1/alfheim_benchmark_v17.py \
+          python vision_v1/alfheim_benchmark_v18.py \
             --cam0 /tmp/native/cam0.mp4 \
             --cam1 /tmp/native/cam1.mp4 \
             --cam2 /tmp/native/cam2.mp4 \
             --truth /tmp/native/truth.csv \
-            --out output/alfheim_v17 \
+            --out output/alfheim_v18 \
             --sample-fps 8.0 \
             --calibration-seconds 4.0 \
-            --model yolo11n.pt | tee output/alfheim_v17/run.log
-          cat output/alfheim_v17/metrics.json
+            --tracker bytetrack.yaml \
+            --imgsz 960 \
+            --model yolo11n.pt | tee output/alfheim_v18/run.log
+          cat output/alfheim_v18/metrics.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: centella-alfheim-v17-conservative-tracklet
-          path: output/alfheim_v17/
+          name: centella-alfheim-v18-full-frame-bytetrack
+          path: output/alfheim_v18/
           if-no-files-found: warn
           retention-days: 14
