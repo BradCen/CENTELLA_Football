@@ -12,6 +12,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install ffmpeg
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+
       - name: Download fixed full-pitch video + 20 Hz sensor truth
         shell: bash
         run: |
@@ -24,7 +29,7 @@ jobs:
           $CURL "$BASE/0037_2013-11-03%2018%3A01%3A18.793282000.h264" -o /tmp/alfheim/segments/0037.h264
           $CURL "$BASE/0038_2013-11-03%2018%3A01%3A21.793325000.h264" -o /tmp/alfheim/segments/0038.h264
           cat /tmp/alfheim/segments/*.h264 > /tmp/alfheim/out/panorama.h264
-          ffmpeg -y -framerate 30 -i /tmp/alfheim/out/panorama.h264 -c:v libx264 -preset veryfast -crf 23 /tmp/alfheim/out/panorama.mp4
+          ffmpeg -y -framerate 25 -i /tmp/alfheim/out/panorama.h264 -c:v libx264 -preset veryfast -crf 23 /tmp/alfheim/out/panorama.mp4
           $CURL 'https://datasets.simula.no/downloads/alfheim/2013-11-03/zxy/2013-11-03_tromso_stromsgodset_first.csv' -o /tmp/alfheim/out/truth.csv
           ffmpeg -y -ss 4 -i /tmp/alfheim/out/panorama.mp4 -frames:v 1 /tmp/alfheim/out/frame.jpg
           ls -lh /tmp/alfheim/out/*
@@ -43,7 +48,7 @@ jobs:
               for row in r:
                   if len(row)>=9:
                       rows.append(row)
-                  if len(rows)>=20000: break
+                  if len(rows)>=50000: break
           assert rows, 'No sensor rows'
           print('first_sensor_row=', rows[0])
           target=[row for row in rows if '2013-11-03 18:01:12' <= row[0] <= '2013-11-03 18:01:25.999999']
