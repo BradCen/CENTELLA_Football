@@ -43,7 +43,7 @@ jobs:
         env:
           PYTHONUNBUFFERED: '1'
         run: |
-          python vision_v1/alfheim_benchmark.py \
+          python vision_v1/alfheim_benchmark_v2.py \
             --video /tmp/alfheim/data/panorama.mp4 \
             --truth /tmp/alfheim/data/truth.csv \
             --out output/alfheim \
@@ -55,7 +55,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: centella-alfheim-benchmark
+          name: centella-alfheim-benchmark-v2
           path: output/alfheim/
           if-no-files-found: warn
           retention-days: 14
