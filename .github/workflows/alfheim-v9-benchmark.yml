@@ -1,4 +1,4 @@
-name: CENTELLA Alfheim V19 Optical-Flow Benchmark
+name: CENTELLA Alfheim V20 Pure Optical-Lock Benchmark
 
 on:
   pull_request:
@@ -28,7 +28,7 @@ jobs:
           set -euxo pipefail
           BASE='https://datasets.simula.no/downloads/alfheim/2013-11-03/First%20Half'
           CURL='curl -fkL --connect-timeout 20 --retry 4 --retry-all-errors --retry-delay 2'
-          mkdir -p /tmp/native output/alfheim_v19
+          mkdir -p /tmp/native output/alfheim_v20
           for cam in 0 1 2; do
             mkdir -p "/tmp/native/$cam"
             $CURL "$BASE/$cam/0056_2013-11-03%2018%3A01%3A14.248366000.h264" -o "/tmp/native/$cam/0056.h264"
@@ -39,25 +39,25 @@ jobs:
           done
           $CURL 'https://datasets.simula.no/downloads/alfheim/2013-11-03/zxy/2013-11-03_tromso_stromsgodset_first.csv' -o /tmp/native/truth.csv
           test -s /tmp/native/truth.csv
-      - name: Run CENTELLA V19 benchmark
+      - name: Run CENTELLA V20 benchmark
         env:
           PYTHONUNBUFFERED: '1'
         run: |
-          python vision_v1/alfheim_benchmark_v19.py \
+          python vision_v1/alfheim_benchmark_v20.py \
             --cam0 /tmp/native/cam0.mp4 \
             --cam1 /tmp/native/cam1.mp4 \
             --cam2 /tmp/native/cam2.mp4 \
             --truth /tmp/native/truth.csv \
-            --out output/alfheim_v19 \
+            --out output/alfheim_v20 \
             --sample-fps 8.0 \
             --calibration-seconds 4.0 \
             --imgsz 1280 \
-            --model yolo11n.pt | tee output/alfheim_v19/run.log
-          cat output/alfheim_v19/metrics.json
+            --model yolo11n.pt | tee output/alfheim_v20/run.log
+          cat output/alfheim_v20/metrics.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: centella-alfheim-v19-optical-flow
-          path: output/alfheim_v19/
+          name: centella-alfheim-v20-pure-optical-lock
+          path: output/alfheim_v20/
           if-no-files-found: warn
           retention-days: 14
