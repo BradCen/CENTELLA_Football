@@ -30,7 +30,7 @@ jobs:
           set -euxo pipefail
           mkdir -p /tmp/alfheim/segments /tmp/alfheim/data output/alfheim
           BASE='https://datasets.simula.no/downloads/alfheim/2013-11-03/First%20Half/panorama'
-          CURL='curl -fkL --retry 4 --retry-delay 2'
+          CURL='curl -fkL --connect-timeout 20 --retry 4 --retry-all-errors --retry-delay 2'
           $CURL "$BASE/0035_2013-11-03%2018%3A01%3A12.794293000.h264" -o /tmp/alfheim/segments/0035.h264
           $CURL "$BASE/0036_2013-11-03%2018%3A01%3A15.793287000.h264" -o /tmp/alfheim/segments/0036.h264
           $CURL "$BASE/0037_2013-11-03%2018%3A01%3A18.793282000.h264" -o /tmp/alfheim/segments/0037.h264
@@ -39,15 +39,15 @@ jobs:
           ffmpeg -y -framerate 25 -i /tmp/alfheim/data/panorama.h264 -c:v libx264 -preset ultrafast -crf 24 /tmp/alfheim/data/panorama.mp4
           $CURL 'https://datasets.simula.no/downloads/alfheim/2013-11-03/zxy/2013-11-03_tromso_stromsgodset_first.csv' -o /tmp/alfheim/data/truth.csv
 
-      - name: Run CENTELLA benchmark
+      - name: Run CENTELLA V3 benchmark
         env:
           PYTHONUNBUFFERED: '1'
         run: |
-          python vision_v1/alfheim_benchmark_v2.py \
+          python vision_v1/alfheim_benchmark_v3.py \
             --video /tmp/alfheim/data/panorama.mp4 \
             --truth /tmp/alfheim/data/truth.csv \
             --out output/alfheim \
-            --sample-fps 2.0 \
+            --sample-fps 4.0 \
             --calibration-seconds 3.0 \
             --model yolo11n.pt | tee output/alfheim/run.log
           cat output/alfheim/metrics.json
@@ -55,7 +55,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: centella-alfheim-benchmark-v2
+          name: centella-alfheim-benchmark-v3
           path: output/alfheim/
           if-no-files-found: warn
           retention-days: 14
