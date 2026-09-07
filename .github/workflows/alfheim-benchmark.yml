@@ -38,23 +38,23 @@ jobs:
           ffmpeg -y -framerate 25 -i /tmp/alfheim/data/panorama.h264 -c:v libx264 -preset ultrafast -crf 24 /tmp/alfheim/data/panorama.mp4
           $CURL 'https://datasets.simula.no/downloads/alfheim/2013-11-03/zxy/2013-11-03_tromso_stromsgodset_first.csv' -o /tmp/alfheim/data/truth.csv
 
-      - name: Run CENTELLA V7 no-leak geometry + physical truth benchmark
+      - name: Run CENTELLA V8 red-team nonlinear geometry benchmark
         env:
           PYTHONUNBUFFERED: '1'
         run: |
-          python vision_v1/alfheim_benchmark_v7.py \
+          python vision_v1/alfheim_benchmark_v8.py \
             --video /tmp/alfheim/data/panorama.mp4 \
             --truth /tmp/alfheim/data/truth.csv \
             --out output/alfheim \
-            --sample-fps 6.0 \
-            --calibration-seconds 3.0 \
+            --sample-fps 12.0 \
+            --calibration-seconds 4.0 \
             --model yolo11n.pt | tee output/alfheim/run.log
           cat output/alfheim/metrics.json
 
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: centella-alfheim-benchmark-v7
+          name: centella-alfheim-benchmark-v8
           path: output/alfheim/
           if-no-files-found: warn
           retention-days: 14
