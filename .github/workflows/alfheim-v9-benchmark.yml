@@ -1,4 +1,4 @@
-name: CENTELLA Alfheim V11 Jersey-Cluster Benchmark
+name: CENTELLA Alfheim V12 Supervised-Kit Benchmark
 
 on:
   pull_request:
@@ -14,7 +14,6 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-
       - name: Install CPU runtime
         run: |
           sudo apt-get update -qq
@@ -22,14 +21,13 @@ jobs:
           python -m pip install --upgrade pip
           pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
           pip install ultralytics scipy pandas opencv-python-headless
-
       - name: Download synchronized native cameras and 20 Hz truth
         shell: bash
         run: |
           set -euxo pipefail
           BASE='https://datasets.simula.no/downloads/alfheim/2013-11-03/First%20Half'
           CURL='curl -fkL --connect-timeout 20 --retry 4 --retry-all-errors --retry-delay 2'
-          mkdir -p /tmp/native output/alfheim_v11
+          mkdir -p /tmp/native output/alfheim_v12
           for cam in 0 1 2; do
             mkdir -p "/tmp/native/$cam"
             $CURL "$BASE/$cam/0056_2013-11-03%2018%3A01%3A14.248366000.h264" -o "/tmp/native/$cam/0056.h264"
@@ -40,26 +38,24 @@ jobs:
           done
           $CURL 'https://datasets.simula.no/downloads/alfheim/2013-11-03/zxy/2013-11-03_tromso_stromsgodset_first.csv' -o /tmp/native/truth.csv
           test -s /tmp/native/truth.csv
-
-      - name: Run CENTELLA V11 benchmark
+      - name: Run CENTELLA V12 benchmark
         env:
           PYTHONUNBUFFERED: '1'
         run: |
-          python vision_v1/alfheim_benchmark_v11.py \
+          python vision_v1/alfheim_benchmark_v12.py \
             --cam0 /tmp/native/cam0.mp4 \
             --cam1 /tmp/native/cam1.mp4 \
             --cam2 /tmp/native/cam2.mp4 \
             --truth /tmp/native/truth.csv \
-            --out output/alfheim_v11 \
+            --out output/alfheim_v12 \
             --sample-fps 8.0 \
             --calibration-seconds 4.0 \
-            --model yolo11n.pt | tee output/alfheim_v11/run.log
-          cat output/alfheim_v11/metrics.json
-
+            --model yolo11n.pt | tee output/alfheim_v12/run.log
+          cat output/alfheim_v12/metrics.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: centella-alfheim-v11-jersey-cluster
-          path: output/alfheim_v11/
+          name: centella-alfheim-v12-supervised-kit
+          path: output/alfheim_v12/
           if-no-files-found: warn
           retention-days: 14
