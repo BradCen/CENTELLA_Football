@@ -39,15 +39,15 @@ jobs:
           ffmpeg -y -framerate 25 -i /tmp/alfheim/data/panorama.h264 -c:v libx264 -preset ultrafast -crf 24 /tmp/alfheim/data/panorama.mp4
           $CURL 'https://datasets.simula.no/downloads/alfheim/2013-11-03/zxy/2013-11-03_tromso_stromsgodset_first.csv' -o /tmp/alfheim/data/truth.csv
 
-      - name: Run CENTELLA V4 persistent-identity benchmark
+      - name: Run CENTELLA V5 Kalman + tracklet relinking benchmark
         env:
           PYTHONUNBUFFERED: '1'
         run: |
-          python vision_v1/alfheim_benchmark_v4_runner.py \
+          python vision_v1/alfheim_benchmark_v5.py \
             --video /tmp/alfheim/data/panorama.mp4 \
             --truth /tmp/alfheim/data/truth.csv \
             --out output/alfheim \
-            --sample-fps 4.0 \
+            --sample-fps 6.0 \
             --calibration-seconds 3.0 \
             --model yolo11n.pt | tee output/alfheim/run.log
           cat output/alfheim/metrics.json
@@ -55,7 +55,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: centella-alfheim-benchmark-v4
+          name: centella-alfheim-benchmark-v5
           path: output/alfheim/
           if-no-files-found: warn
           retention-days: 14
