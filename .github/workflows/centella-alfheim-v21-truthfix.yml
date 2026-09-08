@@ -1,4 +1,4 @@
-name: CENTELLA Alfheim V21 Truth Alignment
+name: CENTELLA Alfheim V21.1 Truth Alignment
 
 on:
   push:
@@ -43,8 +43,9 @@ jobs:
           done
           $CURL 'https://datasets.simula.no/downloads/alfheim/2013-11-03/zxy/2013-11-03_tromso_stromsgodset_first.csv' -o /tmp/native/truth.csv
           test -s /tmp/native/truth.csv
-      - name: Run V21 truth-aligned benchmark
+      - name: Run V21.1 truth-aligned benchmark
         run: |
+          echo 'NATIVE TRUTH ALIGNMENT FIX: +1.454073 s'
           python vision_v1/alfheim_benchmark_v21_truthfix.py \
             --cam0 /tmp/native/cam0.mp4 \
             --cam1 /tmp/native/cam1.mp4 \
