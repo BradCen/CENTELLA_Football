@@ -1,0 +1,42 @@
+name: Alfheim Native Camera Probe
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install ffmpeg
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+      - name: Download synchronized native camera clips
+        shell: bash
+        run: |
+          set -euxo pipefail
+          BASE='https://datasets.simula.no/downloads/alfheim/2013-11-03/First%20Half'
+          CURL='curl -fkL --connect-timeout 20 --retry 4 --retry-all-errors --retry-delay 2'
+          mkdir -p /tmp/native output/native_probe
+          for cam in 0 1 2; do
+            mkdir -p "/tmp/native/$cam"
+            $CURL "$BASE/$cam/0056_2013-11-03%2018%3A01%3A14.248366000.h264" -o "/tmp/native/$cam/0056.h264"
+            $CURL "$BASE/$cam/0057_2013-11-03%2018%3A01%3A17.249311000.h264" -o "/tmp/native/$cam/0057.h264"
+            $CURL "$BASE/$cam/0058_2013-11-03%2018%3A01%3A20.250403000.h264" -o "/tmp/native/$cam/0058.h264"
+            cat "/tmp/native/$cam"/*.h264 > "/tmp/native/cam${cam}.h264"
+            ffmpeg -y -framerate 25 -i "/tmp/native/cam${cam}.h264" -c:v libx264 -preset ultrafast -crf 22 "output/native_probe/cam${cam}.mp4"
+            ffprobe -v error -select_streams v:0 -show_entries stream=width,height,r_frame_rate,avg_frame_rate,nb_frames -of json "output/native_probe/cam${cam}.mp4" > "output/native_probe/cam${cam}_probe.json"
+            ffmpeg -y -ss 2.0 -i "output/native_probe/cam${cam}.mp4" -frames:v 1 "output/native_probe/cam${cam}_frame.jpg"
+            cat "output/native_probe/cam${cam}_probe.json"
+          done
+          ls -lh output/native_probe/
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: alfheim-native-camera-probe
+          path: output/native_probe/
+          retention-days: 14
