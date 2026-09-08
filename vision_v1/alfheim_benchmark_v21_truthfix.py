@@ -8,7 +8,7 @@ import alfheim_benchmark as base
 import alfheim_benchmark_v19 as v19
 
 # Native cameras start later than the panorama used by the original truth
-# loader: 18:01:14.248366 vs 18:01:12.794293.  Native-camera t=0 therefore
+# loader: 18:01:14.248366 vs 18:01:12.794293. Native-camera t=0 therefore
 # must be evaluated against truth shifted by this fixed offset.
 NATIVE_OFFSET_S = 14.248366 - 12.794293
 _ORIGINAL_TRUTH_AT = base.truth_at
@@ -19,7 +19,7 @@ def truth_at_native(truth_by, t):
 
 
 def main():
-    # Keep v19.NATIVE_START as its original pandas Timestamp.  load_truth()
+    # Keep v19.NATIVE_START as its original pandas Timestamp. load_truth()
     # needs that timestamp type; only truth_at() gets the native-video offset.
     v19.truth_at = truth_at_native
     v19.CAL_SPLIT = 3.0
@@ -41,3 +41,5 @@ def main():
 
 if __name__ == '__main__':
     main()
+
+# CI trigger marker: rerun V21 after correcting the native-camera timestamp alignment.
