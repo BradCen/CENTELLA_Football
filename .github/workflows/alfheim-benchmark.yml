@@ -63,7 +63,6 @@ jobs:
             --out output/alfheim \
             --sample-fps 8.0 \
             --calibration-seconds 10.0 \
-            --imgsz 1280 \
             --model yolo11n.pt | tee output/alfheim/run.log
           cat output/alfheim/metrics.json
 
