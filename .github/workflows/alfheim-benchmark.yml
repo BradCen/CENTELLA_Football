@@ -1,6 +1,8 @@
 name: CENTELLA Alfheim V21 Warm-Start Benchmark
 
 on:
+  push:
+    branches: [centella-vision-benchmark]
   pull_request:
     branches: [main]
   workflow_dispatch:
