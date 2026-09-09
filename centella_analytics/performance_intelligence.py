@@ -53,6 +53,8 @@ def performance_intelligence(
         accel_events = 0
         decel_events = 0
         peak_speed = 0.0
+        was_accelerating = False
+        was_decelerating = False
         for prev, cur, dt in _dt_pairs(samples):
             speed = float(cur.speed)
             total_distance += speed * dt
@@ -64,10 +66,14 @@ def performance_intelligence(
                 sprint_time += dt
             acc = cur.acceleration_mps2
             if acc is not None:
-                if acc >= acceleration_threshold_mps2:
+                is_accelerating = acc >= acceleration_threshold_mps2
+                is_decelerating = acc <= -acceleration_threshold_mps2
+                if is_accelerating and not was_accelerating:
                     accel_events += 1
-                if acc <= -acceleration_threshold_mps2:
+                if is_decelerating and not was_decelerating:
                     decel_events += 1
+                was_accelerating = is_accelerating
+                was_decelerating = is_decelerating
             peak_speed = max(peak_speed, speed)
 
         reports[pid] = {
