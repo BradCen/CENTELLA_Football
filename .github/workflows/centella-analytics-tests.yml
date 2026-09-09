@@ -1,0 +1,22 @@
+name: CENTELLA Analytics Tests
+
+on:
+  push:
+    branches:
+      - main
+      - 'centella-*'
+      - 'feature/**'
+  pull_request:
+
+jobs:
+  analytics:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install analytics dependencies
+        run: python -m pip install --upgrade pip numpy pytest
+      - name: Run V24 analytics tests
+        run: python -m pytest -q tests/test_centella_analytics.py
