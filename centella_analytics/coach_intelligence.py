@@ -7,6 +7,16 @@ def coach_intelligence(analysis: dict, min_confidence: float = 0.55) -> dict:
     Rules are deterministic and evidence-backed. They are not autonomous tactical commands;
     each insight includes the measurements that triggered it and an explicit uncertainty field.
     """
+    has_tracking = bool(analysis.get("tracking", {}).get("frames", 0) > 0)
+    if not has_tracking:
+        return {
+            "version": "29.0.0",
+            "valid": False,
+            "insight_count": 0,
+            "insights": [],
+            "disclaimer": "Insights are evidence-backed review prompts, not autonomous coaching decisions.",
+        }
+
     insights = []
     tactical = analysis.get("tactical", {})
     predictive = analysis.get("predictive", {})
@@ -74,7 +84,7 @@ def coach_intelligence(analysis: dict, min_confidence: float = 0.55) -> dict:
     insights.sort(key=lambda x: (priority_rank.get(x["priority"], 9), -x["confidence"]))
     return {
         "version": "29.0.0",
-        "valid": bool(analysis.get("tracking", {}).get("frames", 0) > 0),
+        "valid": True,
         "insight_count": len(insights),
         "insights": insights,
         "disclaimer": "Insights are evidence-backed review prompts, not autonomous coaching decisions.",
