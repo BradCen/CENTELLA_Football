@@ -9,6 +9,7 @@ from .events import EventTimeline
 from .events_analytics import duel_summary, expected_assists, set_piece_summary, xg_summary
 from .goalkeeping import goalkeeper_positioning
 from .pitch_control import PitchControlConfig, pitch_control
+from .player_intelligence import player_intelligence
 from .quality import tracking_quality
 from .tactical import aggregate_block_metrics, pass_network, post_loss_pressure
 from .types import TrackingFrame
@@ -16,7 +17,7 @@ from .types import TrackingFrame
 
 @dataclass(slots=True)
 class AnalyticsEngine:
-    """Orchestrate the V24 analytical layer without coupling it to a detector."""
+    """Orchestrate the V24-V26 analytical layers without coupling them to a detector."""
 
     pitch_length_m: float = 105.0
     pitch_width_m: float = 68.0
@@ -26,7 +27,7 @@ class AnalyticsEngine:
         opponent = opponent or ("away" if team == "home" else "home")
         latest = frames[-1] if frames else None
         report = {
-            "version": "24.0.0",
+            "version": "26.0.0",
             "team": team,
             "tracking": {"frames": len(frames), "first_t": float(frames[0].t) if frames else None, "last_t": float(frames[-1].t) if frames else None},
             "data_quality": tracking_quality(frames),
@@ -44,16 +45,27 @@ class AnalyticsEngine:
             },
             "duels": duel_summary(events.duels, team),
             "set_pieces": set_piece_summary(events.set_pieces, events.shots, team),
+            "player_intelligence": player_intelligence(
+                frames, events, team=team,
+                pitch_length_m=self.pitch_length_m,
+                pitch_width_m=self.pitch_width_m,
+            ),
         }
         if latest:
             report["pitch_control"] = pitch_control(latest.players, team, self.control_config)
         return report
 
     def analyze_tracking(self, frames: Sequence[TrackingFrame], team: str, opponent: str | None = None, config: EventInferenceConfig | None = None) -> dict:
-        """Run V24 from tracking alone using conservative candidate-event inference."""
+        """Run V24-V26 from tracking alone using conservative candidate-event inference."""
         events = infer_events(frames, config)
         report = self.analyze_team(frames, events, team, opponent)
-        report["event_inference"] = {"mode": "tracking_candidate_inference", "passes": len(events.passes), "shots": len(events.shots), "possession_changes": len(events.possession_changes), "validated_ground_truth": False}
+        report["event_inference"] = {
+            "mode": "tracking_candidate_inference",
+            "passes": len(events.passes),
+            "shots": len(events.shots),
+            "possession_changes": len(events.possession_changes),
+            "validated_ground_truth": False,
+        }
         return report
 
     def analyze_goalkeeper(self, goalkeeper_id: str, frames: Sequence[TrackingFrame], shots_faced=None, saves=None) -> dict:
