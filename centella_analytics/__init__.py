@@ -11,6 +11,7 @@ from .pitch_control import PitchControlConfig, pitch_control
 from .player_intelligence import player_intelligence
 from .player_profile import player_passport, role_suitability
 from .possession import infer_possession_changes, possession_summary
+from .performance_intelligence import performance_intelligence
 from .quality import QualityThresholds, tracking_quality
 from .serialization import load_xg_model, save_xg_model
 from .tactical import aggregate_block_metrics, block_metrics, pass_network, post_loss_pressure
@@ -30,6 +31,7 @@ __all__ = [
     "GoalkeeperAnalytics", "WorkloadProfile", "compute_workload", "QualityThresholds", "tracking_quality",
     "load_tracking_csv", "load_events_json", "frames_from_native_outputs",
     "player_passport", "role_suitability", "player_intelligence", "tactical_intelligence",
+    "performance_intelligence",
 ]
 
-__version__ = "27.0.0"
+__version__ = "28.0.0"
