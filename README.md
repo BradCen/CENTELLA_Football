@@ -2,7 +2,7 @@
 
 CENTELLA Football is the football-analysis software stack built around **computer vision, multi-camera tracking, event semantics, and football intelligence**.
 
-This branch is intentionally **not a football game or simulator**. Its purpose is to turn synchronized visual observations into auditable football metrics and higher-level tactical, physical, and predictive intelligence.
+This branch is intentionally **not a football game or simulator**. Its purpose is to turn synchronized visual observations into auditable football metrics and higher-level tactical, physical, predictive, player and coach intelligence.
 
 ## Architecture
 
@@ -13,7 +13,8 @@ vision_v1/
   V21 vision, calibration, synchronization and tracking
       ↓
 centella_analytics/
-  event semantics + football intelligence
+  V24 analytics → V25 event bridge → V26 player → V27 tactical
+  → V28 performance → V29 coach intelligence → V30 platform
       ↓
 reports / APIs / future coach & player interfaces
 ```
@@ -26,12 +27,16 @@ The vision layer contains the existing V21 work: calibration, camera synchroniza
 
 The analytics package consumes tracking and synchronized ball observations and provides:
 
-- collective tactical structure: pass networks, block geometry, compactness, width, line heights and post-loss response;
+- collective tactical structure: pass networks, block geometry, compactness, width, line heights, transitions and post-loss response;
 - predictive models: xG bootstrap/model fitting, auditable xA, and confidence-weighted pitch control;
 - event semantics: passes, shots, possession changes and extensible football event schemas;
 - goalkeeper, duel, set-piece, progression and transition analytics;
 - physical workload and data-quality diagnostics;
-- player passports and development-oriented analytical signals;
+- V26 player intelligence: observation quality, movement, spatial occupation, technical rates and participation;
+- V27 tactical intelligence: player interactions, local numerical advantage and repeatable observed structures;
+- V28 performance intelligence: external-load and movement exposure derived from tracking;
+- V29 coach intelligence: ranked, evidence-backed review prompts with explicit uncertainty;
+- V30 platform orchestration: one auditable contract from synchronized tracking to coach-facing intelligence;
 - the V25 Vision → Intelligence bridge for native V21-style fused rows.
 
 ## Separation from the legacy football game
@@ -67,14 +72,17 @@ Automatically inferred events are **candidate observations**, not ground truth. 
 3. xG/xA/xGOT performance is not claimed without appropriate labelled-data calibration and out-of-sample validation.
 4. Candidate event inference is never presented as manually validated event truth.
 5. Workload outputs are performance/review signals, not medical diagnoses.
-6. Production deployments for player data must add appropriate access control, consent, retention and audit mechanisms.
+6. V29 coaching insights are evidence-backed review prompts, not autonomous coaching decisions.
+7. Production deployments for player data must add appropriate access control, consent, retention and audit mechanisms.
 
 ## Development status
 
-The current development line is the **Vision → Football Intelligence** stack. Version labels (V24, V25 and later) describe the evolution of this software layer, while the V21 vision benchmark remains a separate compatibility foundation.
+The current development line now contains the **V24 → V30 Vision → Football Intelligence architecture**. V24-V28 provide the analytical substrate, V29 turns measurements into explainable coaching observations, and V30 provides the unified platform boundary. The V21 vision benchmark remains a separate compatibility foundation.
 
-See `centella_analytics/README.md` for the analytics module contract and `docs/PROJECT_BOUNDARIES.md` for the repository separation rules.
+See `centella_analytics/README.md`, `docs/V26_PLAYER_INTELLIGENCE.md`, `docs/V30_PLATFORM.md` and `docs/PROJECT_BOUNDARIES.md` for module contracts, provenance and validation rules.
 
 ## Validation
 
-GitHub Actions runs the analytics regression suite on this branch, covering the existing V24 core plus the event-inference and V25 bridge tests.
+GitHub Actions runs the analytics regression suite on this branch, covering the V24 core, event inference, V25 bridge, V26 player intelligence, V27 tactical intelligence, V28 performance intelligence, V29 coach intelligence and V30 platform contract.
+
+Passing unit tests do not replace real-match validation. The production path still requires labelled multi-camera/ball datasets, event-truth alignment, model calibration, benchmark coverage and hardened video ingestion.
