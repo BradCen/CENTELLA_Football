@@ -29,7 +29,7 @@ def coach_intelligence(analysis: dict, min_confidence: float = 0.55) -> dict:
 
     xg = predictive.get("xg", {})
     shot_count = xg.get("shots", 0)
-    total_xg = xg.get("total_xg", 0.0)
+    total_xg = xg.get("xg", 0.0)
     if shot_count and total_xg / shot_count < 0.08:
         confidence = min(0.9, 0.55 + min(0.35, shot_count / 20.0))
         if confidence >= min_confidence:
