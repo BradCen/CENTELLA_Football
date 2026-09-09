@@ -1,4 +1,4 @@
-name: CENTELLA Alfheim V22 Global Tracker Benchmark
+name: CENTELLA Alfheim V23 Temporal Fusion Benchmark
 
 on:
   push:
@@ -51,11 +51,11 @@ jobs:
           $CURL 'https://datasets.simula.no/downloads/alfheim/2013-11-03/zxy/2013-11-03_tromso_stromsgodset_first.csv' -o /tmp/alfheim/native/truth.csv
           test -s /tmp/alfheim/native/truth.csv
 
-      - name: Run CENTELLA V22 conservative tracker benchmark
+      - name: Run CENTELLA V23 temporal-fusion benchmark
         env:
           PYTHONUNBUFFERED: '1'
         run: |
-          python vision_v1/alfheim_benchmark_v22_conservative.py \
+          python vision_v1/alfheim_benchmark_v23_temporal_fusion.py \
             --cam0 /tmp/alfheim/native/cam0.mp4 \
             --cam1 /tmp/alfheim/native/cam1.mp4 \
             --cam2 /tmp/alfheim/native/cam2.mp4 \
@@ -69,7 +69,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: centella-alfheim-v22-global-tracker
+          name: centella-alfheim-v23-temporal-fusion
           path: output/alfheim/
           if-no-files-found: warn
           retention-days: 14
