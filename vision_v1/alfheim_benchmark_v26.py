@@ -12,6 +12,7 @@ import alfheim_benchmark_v19 as v19
 
 NATIVE_OFFSET_S = 14.248366 - 12.794293
 _ORIGINAL_TRUTH_AT = base.truth_at
+VALIDATED_LIMIT_M = 8.0
 
 
 def truth_at_native(truth_by, t):
@@ -19,14 +20,6 @@ def truth_at_native(truth_by, t):
 
 
 def fuse_best_camera(all_outputs, qualities, truth_by):
-    """Prefer the single best validated camera for each player/time.
-
-    The baseline fuses observations geometrically even when a second camera has
-    materially worse calibration. With fixed player identities, introducing that
-    second estimate can pull a good camera away from truth. V26 therefore uses
-    the lowest-error validated camera as the primary measurement and only falls
-    back to an unvalidated camera when no validated measurement exists.
-    """
     buckets = defaultdict(list)
     times = set()
     for cam, outs in all_outputs.items():
@@ -39,13 +32,10 @@ def fuse_best_camera(all_outputs, qualities, truth_by):
         q = float(qualities.get(int(cam), 99.0))
         return q if np.isfinite(q) else 99.0
 
-    validated_limit_m = 8.0
     rows = []
     for (tk, gid), items in sorted(buckets.items()):
-        validated = [o for o in items if quality(int(o['cam'])) < validated_limit_m]
+        validated = [o for o in items if quality(int(o['cam'])) < VALIDATED_LIMIT_M]
         pool = validated or items
-        # Deterministic primary-camera choice. Lowest validation error wins;
-        # ties favor the camera id for reproducibility.
         chosen = min(pool, key=lambda o: (quality(int(o['cam'])), int(o['cam'])))
         p = np.asarray(chosen['xy'], float)
         used = [int(chosen['cam'])]
@@ -88,7 +78,7 @@ def main():
             m['version'] = 'v26-best-validated-camera-selection'
             m['native_truth_offset_s'] = NATIVE_OFFSET_S
             m['fusion_policy'] = {
-                'validated_camera_mae_limit_m': validated_limit_m,
+                'validated_camera_mae_limit_m': VALIDATED_LIMIT_M,
                 'selection': 'lowest-validation-MAE camera per identity/time',
                 'holdout_ground_truth_used_for_inference': False,
             }
