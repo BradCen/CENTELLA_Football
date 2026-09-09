@@ -8,6 +8,7 @@ from .events import DuelEvent, EventTimeline, PassEvent, SetPieceEvent, ShotEven
 from .expected import LogisticXGModel, ShotFeatures, fit_xg
 from .goalkeeping import GoalkeeperAnalytics
 from .pitch_control import PitchControlConfig, pitch_control
+from .player_intelligence import player_intelligence
 from .player_profile import player_passport, role_suitability
 from .possession import infer_possession_changes, possession_summary
 from .quality import QualityThresholds, tracking_quality
@@ -27,7 +28,7 @@ __all__ = [
     "ShotFeatures", "LogisticXGModel", "fit_xg", "save_xg_model", "load_xg_model",
     "GoalkeeperAnalytics", "WorkloadProfile", "compute_workload", "QualityThresholds", "tracking_quality",
     "load_tracking_csv", "load_events_json", "frames_from_native_outputs",
-    "player_passport", "role_suitability",
+    "player_passport", "role_suitability", "player_intelligence",
 ]
 
-__version__ = "24.0.0"
+__version__ = "26.0.0"
