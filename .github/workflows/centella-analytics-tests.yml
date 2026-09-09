@@ -18,5 +18,5 @@ jobs:
           python-version: '3.11'
       - name: Install analytics dependencies
         run: python -m pip install --upgrade pip numpy pytest
-      - name: Run V24-V27 analytics tests
-        run: python -m pytest -q tests/test_centella_analytics.py tests/test_event_inference.py tests/test_v25_pipeline.py tests/test_player_intelligence.py tests/test_tactical_intelligence.py
+      - name: Run V24-V28 analytics tests
+        run: python -m pytest -q tests/test_centella_analytics.py tests/test_event_inference.py tests/test_v25_pipeline.py tests/test_player_intelligence.py tests/test_tactical_intelligence.py tests/test_performance_intelligence.py
