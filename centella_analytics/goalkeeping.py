@@ -5,8 +5,9 @@ from typing import Sequence
 
 import numpy as np
 
-from .events import SetPieceEvent, ShotEvent
-from .expected import LogisticXGModel, shot_xg
+from .events import ShotEvent
+from .events_analytics import shot_xg
+from .expected import LogisticXGModel
 
 
 @dataclass(slots=True)
@@ -23,16 +24,16 @@ class GoalkeeperAnalytics:
 
     def report(self, model: LogisticXGModel | None = None) -> dict:
         model = model or LogisticXGModel.heuristic()
-        on_target = [s for s in self.saves if s.on_target] + [s for s in self.conceded if s.on_target]
+        on_target = [s for s in self.saves if s.on_target] + [s for s in self.conceded if s.on_target and s not in self.saves]
         xg_on_target = [float(s.xgot) if s.xgot is not None else shot_xg(s, model) for s in on_target]
-        goals = len([s for s in self.conceded if s.goal])
+        goals = sum(bool(s.goal) for s in self.conceded)
         total_faced = len(on_target)
         saved = len(self.saves)
         return {
             "goalkeeper_id": self.goalkeeper_id,
             "shots_on_target_faced": total_faced,
             "saves": saved,
-            "goals_conceded": goals,
+            "goals_conceded": int(goals),
             "save_rate": float(saved / total_faced) if total_faced else None,
             "post_shot_xg_faced": float(sum(xg_on_target)),
             "goals_prevented_proxy": float(sum(xg_on_target) - goals),
@@ -48,11 +49,7 @@ class GoalkeeperAnalytics:
 
 
 def goalkeeper_positioning(frames, goalkeeper_id: str, pitch_length: float = 105.0, pitch_width: float = 68.0) -> dict:
-    pts = []
-    for f in frames:
-        for p in f.players:
-            if p.player_id == goalkeeper_id:
-                pts.append((p.x, p.y, f.t))
+    pts = [(p.x, p.y, f.t) for f in frames for p in f.players if p.player_id == goalkeeper_id]
     if not pts:
         return {"valid": False, "samples": 0}
     xy = np.asarray([(p[0], p[1]) for p in pts], dtype=float)
