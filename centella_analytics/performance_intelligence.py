@@ -1,3 +1,5 @@
+"""V28 performance intelligence for movement-load analysis."""
+
 from __future__ import annotations
 
 from collections import defaultdict
@@ -10,13 +12,13 @@ from .types import PlayerSample, TrackingFrame
 
 def _dt_pairs(samples: Sequence[PlayerSample]):
     for prev, cur in zip(samples, samples[1:]):
-        dt = float(cur.t - prev.t)
-        if dt > 0:
-            yield prev, cur, dt
+        yield prev, cur, max(0.0, float(cur.t - prev.t))
 
 
 def _per90(value: float, minutes: float) -> float:
-    return float(90.0 * value / minutes) if minutes > 0 else 0.0
+    if minutes <= 0.0:
+        return 0.0
+    return float(value * 90.0 / minutes)
 
 
 def performance_intelligence(
@@ -53,8 +55,18 @@ def performance_intelligence(
         accel_events = 0
         decel_events = 0
         peak_speed = 0.0
-        was_accelerating = False
-        was_decelerating = False
+
+        # The first sample carries an acceleration value in native tracking outputs.
+        # Seed episode state from it so an already-active acceleration/deceleration is
+        # counted once, then only count threshold crossings for subsequent samples.
+        first_acc = samples[0].acceleration_mps2
+        was_accelerating = bool(first_acc is not None and first_acc >= acceleration_threshold_mps2)
+        was_decelerating = bool(first_acc is not None and first_acc <= -acceleration_threshold_mps2)
+        if was_accelerating:
+            accel_events += 1
+        if was_decelerating:
+            decel_events += 1
+
         for prev, cur, dt in _dt_pairs(samples):
             speed = float(cur.speed)
             total_distance += speed * dt
