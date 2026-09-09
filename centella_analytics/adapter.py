@@ -6,49 +6,59 @@ from pathlib import Path
 from typing import Iterable
 
 from .events import EventTimeline
-from .types import PlayerSample, TrackingFrame
+from .types import BallSample, PlayerSample, TrackingFrame
 
 
 def load_tracking_csv(path: str | Path) -> list[TrackingFrame]:
-    """Load canonical tracking CSV: t, player_id, team, x, y + optional kinematics."""
+    """Load canonical tracking CSV: player rows plus optional ball columns."""
     frames: dict[float, TrackingFrame] = {}
     with Path(path).open("r", encoding="utf-8", newline="") as fh:
         for row in csv.DictReader(fh):
             t = float(row["t"])
             f = frames.setdefault(t, TrackingFrame(t=t))
-            f.players.append(PlayerSample(
-                player_id=str(row["player_id"]), team=row["team"], x=float(row["x"]), y=float(row["y"]), t=t,
-                confidence=float(row.get("confidence") or 1.0), vx=float(row.get("vx") or 0.0), vy=float(row.get("vy") or 0.0),
-                speed_mps=float(row["speed_mps"]) if row.get("speed_mps") not in (None, "") else None,
-                acceleration_mps2=float(row["acceleration_mps2"]) if row.get("acceleration_mps2") not in (None, "") else None,
-                role=row.get("role") or None,
-                is_goalkeeper=str(row.get("is_goalkeeper", "0")).lower() in {"1", "true", "yes"},
-            ))
+            if row.get("player_id") not in (None, ""):
+                f.players.append(PlayerSample(
+                    player_id=str(row["player_id"]), team=row.get("team", "unknown"), x=float(row["x"]), y=float(row["y"]), t=t,
+                    confidence=float(row.get("confidence") or 1.0), vx=float(row.get("vx") or 0.0), vy=float(row.get("vy") or 0.0),
+                    speed_mps=float(row["speed_mps"]) if row.get("speed_mps") not in (None, "") else None,
+                    acceleration_mps2=float(row["acceleration_mps2"]) if row.get("acceleration_mps2") not in (None, "") else None,
+                    role=row.get("role") or None,
+                    is_goalkeeper=str(row.get("is_goalkeeper", "0")).lower() in {"1", "true", "yes"},
+                ))
+            if row.get("ball_x") not in (None, "") and row.get("ball_y") not in (None, ""):
+                f.ball = BallSample(
+                    t=t, x=float(row["ball_x"]), y=float(row["ball_y"]), z=float(row.get("ball_z") or 0.0),
+                    confidence=float(row.get("ball_confidence") or 1.0), vx=float(row.get("ball_vx") or 0.0),
+                    vy=float(row.get("ball_vy") or 0.0), vz=float(row.get("ball_vz") or 0.0),
+                )
     return [frames[t] for t in sorted(frames)]
 
 
 def frames_from_native_outputs(outputs: Iterable[dict], team_by_gid: dict[str, str] | None = None) -> list[TrackingFrame]:
-    """Bridge the existing multicamera V21 fused rows (`t`, `gid`, `xy`) into V24."""
+    """Bridge existing V21 fused rows and optional synchronized ball fields into V24."""
     grouped: dict[float, TrackingFrame] = {}
     team_by_gid = team_by_gid or {}
     for row in outputs:
-        if "t" not in row or "gid" not in row or "xy" not in row:
+        if "t" not in row:
             continue
-        xy = row["xy"]
-        if len(xy) < 2:
-            continue
-        t = float(row["t"]); gid = str(row["gid"])
+        t = float(row["t"])
         f = grouped.setdefault(t, TrackingFrame(t=t))
-        f.players.append(PlayerSample(
-            player_id=gid,
-            team=team_by_gid.get(gid, row.get("team", "unknown")),
-            x=float(xy[0]), y=float(xy[1]), t=t,
-            confidence=float(row.get("confidence", 1.0)),
-            speed_mps=float(row["speed_mps"]) if row.get("speed_mps") is not None else None,
-            acceleration_mps2=float(row["acceleration_mps2"]) if row.get("acceleration_mps2") is not None else None,
-            role=row.get("role") or None,
-            is_goalkeeper=bool(row.get("is_goalkeeper", False)),
-        ))
+        if "gid" in row and "xy" in row and len(row["xy"]) >= 2:
+            gid = str(row["gid"]); xy = row["xy"]
+            f.players.append(PlayerSample(
+                player_id=gid, team=team_by_gid.get(gid, row.get("team", "unknown")), x=float(xy[0]), y=float(xy[1]), t=t,
+                confidence=float(row.get("confidence", 1.0)),
+                speed_mps=float(row["speed_mps"]) if row.get("speed_mps") is not None else None,
+                acceleration_mps2=float(row["acceleration_mps2"]) if row.get("acceleration_mps2") is not None else None,
+                role=row.get("role") or None, is_goalkeeper=bool(row.get("is_goalkeeper", False)),
+            ))
+        if row.get("ball_xy") is not None and len(row["ball_xy"]) >= 2:
+            bxy = row["ball_xy"]
+            f.ball = BallSample(
+                t=t, x=float(bxy[0]), y=float(bxy[1]), z=float(row.get("ball_z", 0.0)),
+                confidence=float(row.get("ball_confidence", 1.0)), vx=float(row.get("ball_vx", 0.0)),
+                vy=float(row.get("ball_vy", 0.0)), vz=float(row.get("ball_vz", 0.0)),
+            )
     return [grouped[t] for t in sorted(grouped)]
 
 
