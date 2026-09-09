@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Sequence
 
 from .advanced import field_tilt, progression_rate, transition_metrics
+from .event_inference import EventInferenceConfig, infer_events
 from .events import EventTimeline
 from .events_analytics import duel_summary, expected_assists, set_piece_summary, xg_summary
 from .goalkeeping import goalkeeper_positioning
@@ -27,11 +28,7 @@ class AnalyticsEngine:
         report = {
             "version": "24.0.0",
             "team": team,
-            "tracking": {
-                "frames": len(frames),
-                "first_t": float(frames[0].t) if frames else None,
-                "last_t": float(frames[-1].t) if frames else None,
-            },
+            "tracking": {"frames": len(frames), "first_t": float(frames[0].t) if frames else None, "last_t": float(frames[-1].t) if frames else None},
             "data_quality": tracking_quality(frames),
             "tactical": {
                 "pass_network": pass_network(events.passes, team),
@@ -50,6 +47,13 @@ class AnalyticsEngine:
         }
         if latest:
             report["pitch_control"] = pitch_control(latest.players, team, self.control_config)
+        return report
+
+    def analyze_tracking(self, frames: Sequence[TrackingFrame], team: str, opponent: str | None = None, config: EventInferenceConfig | None = None) -> dict:
+        """Run V24 from tracking alone using conservative candidate-event inference."""
+        events = infer_events(frames, config)
+        report = self.analyze_team(frames, events, team, opponent)
+        report["event_inference"] = {"mode": "tracking_candidate_inference", "passes": len(events.passes), "shots": len(events.shots), "possession_changes": len(events.possession_changes), "validated_ground_truth": False}
         return report
 
     def analyze_goalkeeper(self, goalkeeper_id: str, frames: Sequence[TrackingFrame], shots_faced=None, saves=None) -> dict:
