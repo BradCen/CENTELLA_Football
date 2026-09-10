@@ -11,6 +11,7 @@ on:
       - 'vision_v1/alfheim_benchmark_v19.py'
       - 'vision_v1/alfheim_identity_diagnostic_v1.py'
       - '.github/workflows/centella-alfheim-v49-oos.yml'
+  workflow_dispatch:
 
 jobs:
   benchmark:
