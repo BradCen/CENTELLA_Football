@@ -1,5 +1,6 @@
 name: CENTELLA Alfheim V49 OOS 0059-0061
 # Force-run marker: every update to this workflow intentionally triggers the OOS benchmark.
+# Force-run: 2026-09-10T13:06Z
 
 on:
   push:
