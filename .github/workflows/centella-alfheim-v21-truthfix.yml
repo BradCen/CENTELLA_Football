@@ -68,7 +68,17 @@ jobs:
             --calibration-seconds 4.0 \
             --imgsz 1280 \
             --model yolo11n.pt 2>&1 | tee output/alfheim_v32/run.log
-          cat output/alfheim_v32/metrics.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('output/alfheim_v32/metrics.json')
+          m=json.loads(p.read_text())
+          print(json.dumps(m, indent=2))
+          assert m.get('version') == 'v32-temporal-identity-preserving-reassociation', m.get('version')
+          assert m['matched'] == 504, m['matched']
+          assert m['recall'] >= 0.90, m['recall']
+          assert m['position_mae_m'] < 7.286296280008049, m['position_mae_m']
+          PY
       - name: Diagnose holdout identity switches
         run: |
           set -euo pipefail
