@@ -18,7 +18,7 @@ on:
 jobs:
   benchmark:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -37,17 +37,21 @@ jobs:
         run: |
           set -euxo pipefail
           BASE='https://datasets.simula.no/downloads/alfheim/2013-11-03/First%20Half'
-          CURL='curl -fkL --connect-timeout 20 --retry 4 --retry-all-errors --retry-delay 2'
+          CURL=(curl -4 -fkL --connect-timeout 30 --max-time 180 --retry 8 --retry-all-errors --retry-delay 3)
           mkdir -p /tmp/native output/alfheim_v31
           for cam in 0 1 2; do
             mkdir -p "/tmp/native/$cam"
-            $CURL "$BASE/$cam/0056_2013-11-03%2018%3A01%3A14.248366000.h264" -o "/tmp/native/$cam/0056.h264"
-            $CURL "$BASE/$cam/0057_2013-11-03%2018%3A01%3A17.249311000.h264" -o "/tmp/native/$cam/0057.h264"
-            $CURL "$BASE/$cam/0058_2013-11-03%2018%3A01%3A20.250403000.h264" -o "/tmp/native/$cam/0058.h264"
+            "${CURL[@]}" "$BASE/$cam/0056_2013-11-03%2018%3A01%3A14.248366000.h264" -o "/tmp/native/$cam/0056.h264"
+            "${CURL[@]}" "$BASE/$cam/0057_2013-11-03%2018%3A01%3A17.249311000.h264" -o "/tmp/native/$cam/0057.h264"
+            "${CURL[@]}" "$BASE/$cam/0058_2013-11-03%2018%3A01%3A20.250403000.h264" -o "/tmp/native/$cam/0058.h264"
+            test -s "/tmp/native/$cam/0056.h264"
+            test -s "/tmp/native/$cam/0057.h264"
+            test -s "/tmp/native/$cam/0058.h264"
             cat "/tmp/native/$cam"/*.h264 > "/tmp/native/cam${cam}.h264"
             ffmpeg -y -r 25 -i "/tmp/native/cam${cam}.h264" -c:v libx264 -preset ultrafast -crf 22 -pix_fmt yuv420p "/tmp/native/cam${cam}.mp4"
+            test -s "/tmp/native/cam${cam}.mp4"
           done
-          $CURL 'https://datasets.simula.no/downloads/alfheim/2013-11-03/zxy/2013-11-03_tromso_stromsgodset_first.csv' -o /tmp/native/truth.csv
+          "${CURL[@]}" 'https://datasets.simula.no/downloads/alfheim/2013-11-03/zxy/2013-11-03_tromso_stromsgodset_first.csv' -o /tmp/native/truth.csv
           test -s /tmp/native/truth.csv
       - name: Run V31 per-player camera benchmark
         run: |
