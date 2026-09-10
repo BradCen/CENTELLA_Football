@@ -1,6 +1,7 @@
 name: CENTELLA Alfheim V49 OOS 0059-0061
 # Force-run marker: every update to this workflow intentionally triggers the OOS benchmark.
-# Force-run: 2026-09-10T13:06Z
+# Fix native downloader: use the canonical segment filenames directly; do not scrape directory HTML.
+# Force-run: 2026-09-10T13:XXZ
 
 on:
   push:
@@ -41,10 +42,12 @@ jobs:
           mkdir -p /tmp/native output/alfheim_v49
           for cam in 0 1 2; do
             mkdir -p "/tmp/native/$cam"
-            for seg in 0059 0060 0061; do
-              html=$("${CURL[@]}" "$BASE/$cam/")
-              href=$(printf '%s' "$html" | grep -oE "href=\"[^"]*${seg}_[^\"]+\.h264\"" | head -1 | sed -E 's/^href=\"//;s/\"$//')
-              test -n "$href"
+            for spec in \
+              '0059|0059_2013-11-03%2018%3A01%3A23.251115000.h264' \
+              '0060|0060_2013-11-03%2018%3A01%3A26.252555000.h264' \
+              '0061|0061_2013-11-03%2018%3A01%3A29.253030000.h264'; do
+              seg="${spec%%|*}"
+              href="${spec#*|}"
               echo "cam=$cam seg=$seg href=$href"
               "${CURL[@]}" "$BASE/$cam/$href" -o "/tmp/native/$cam/${seg}.h264"
               test -s "/tmp/native/$cam/${seg}.h264"
