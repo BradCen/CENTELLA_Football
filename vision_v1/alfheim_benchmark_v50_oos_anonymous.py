@@ -16,6 +16,11 @@ SAMPLE_FPS = 8.0
 CALIBRATION_SECONDS = 3.0
 
 
+class _KeepAll:
+    def keep(self, _d):
+        return True
+
+
 def truth_at_oos(truth_by, t: float):
     return base.truth_at(truth_by, float(t) + SEGMENT_VIDEO_START_S)
 
@@ -37,7 +42,6 @@ def framewise_geometry_eval(frames, truth_by, after_s: float):
         G = np.asarray([[g['x'], g['y']] for g in gt], float)
         C = np.linalg.norm(pred[:, None, :] - G[None, :, :], axis=2)
         ri, ci = linear_sum_assignment(C)
-        # No inference-time GT gate; 4m is evaluation-only and matches the historical benchmark convention.
         for i, j in zip(ri, ci):
             if C[i, j] <= 4.0:
                 errors.append(float(C[i, j]))
@@ -142,6 +146,7 @@ def build_frames(cam_paths):
     times = np.arange(0.4, max(0.41, duration - 0.2), 1.0 / SAMPLE_FPS)
     frames = []
     models = {c: v10.seed_model(c) for c in cam_paths}
+    keep_all = {c: _KeepAll() for c in cam_paths}
 
     for idx, t in enumerate(times):
         entries = {}
@@ -153,7 +158,7 @@ def build_frames(cam_paths):
             raw = base.detect_native(detector, frame)
             det = v10.on_pitch(cam, raw, models[cam])
             entries[cam] = {'t': float(t), 'det': det}
-        fused = v10.fuse_frame(entries, {0: None, 1: None, 2: None}, models)
+        fused = v10.fuse_frame(entries, keep_all, models)
         frames.append({'t': float(t), 'fused': fused})
         if idx % 8 == 0:
             print(f't={t:.2f}s fused={len(fused)}', flush=True)
@@ -173,7 +178,6 @@ def main():
     out = Path(args.out); out.mkdir(parents=True, exist_ok=True)
 
     frames, duration = build_frames({0: args.cam0, 1: args.cam1, 2: args.cam2})
-    # The tracker sees only video detections and static seed geometry. No truth is passed here.
     tracks = v10.track_world(frames)
     truth_by = base.load_truth(args.truth, video_start=v10.NATIVE_START)
 
@@ -192,11 +196,12 @@ def main():
             gt = {g['id']: g for g in truth_at_oos(truth_by, o['t'])}
             if gid not in gt:
                 continue
+            q = np.asarray([gt[gid]['x'], gt[gid]['y']], float)
             rows.append({
                 't': o['t'], 'track_id': tr.tid, 'gt_id': gid,
                 'pred_x': float(o['xy'][0]), 'pred_y': float(o['xy'][1]),
                 'truth_x': float(gt[gid]['x']), 'truth_y': float(gt[gid]['y']),
-                'position_error_m': float(np.linalg.norm(o['xy'] - np.asarray([gt[gid]['x'], gt[gid]['y']], float))),
+                'position_error_m': float(np.linalg.norm(o['xy'] - q)),
                 'camera_count': len(o['cams']), 'cams': ','.join(map(str, o['cams'])),
             })
 
@@ -223,5 +228,4 @@ def main():
     print(json.dumps(result, indent=2), flush=True)
 
 
-if __name__ == '__main__':
-    main()
+if __name__ == '__main__':main()
