@@ -1,4 +1,4 @@
-name: CENTELLA Alfheim V36 Healthy Optical-Lock Benchmark
+name: CENTELLA Alfheim V37 Temporal Calibration Identity Benchmark
 
 on:
   pull_request:
@@ -6,7 +6,7 @@ on:
   push:
     branches: [centella-v24-football-intelligence]
     paths:
-      - 'vision_v1/alfheim_benchmark_v36.py'
+      - 'vision_v1/alfheim_benchmark_v37.py'
       - 'vision_v1/alfheim_benchmark_v26.py'
       - 'vision_v1/alfheim_benchmark_v19.py'
       - 'vision_v1/alfheim_identity_diagnostic_v1.py'
@@ -35,7 +35,7 @@ jobs:
           set -euxo pipefail
           BASE='https://datasets.simula.no/downloads/alfheim/2013-11-03/First%20Half'
           CURL=(curl -4 -fkL --connect-timeout 30 --max-time 180 --retry 8 --retry-all-errors --retry-delay 3)
-          mkdir -p /tmp/native output/alfheim_v36
+          mkdir -p /tmp/native output/alfheim_v37
           for cam in 0 1 2; do
             mkdir -p "/tmp/native/$cam"
             "${CURL[@]}" "$BASE/$cam/0056_2013-11-03%2018%3A01%3A14.248366000.h264" -o "/tmp/native/$cam/0056.h264"
@@ -48,16 +48,16 @@ jobs:
           done
           "${CURL[@]}" 'https://datasets.simula.no/downloads/alfheim/2013-11-03/zxy/2013-11-03_tromso_stromsgodset_first.csv' -o /tmp/native/truth.csv
           test -s /tmp/native/truth.csv
-      - name: Run V36 healthy optical-lock benchmark
+      - name: Run V37 temporal calibration identity benchmark
         run: |
           set -euo pipefail
-          python vision_v1/alfheim_benchmark_v36.py --cam0 /tmp/native/cam0.mp4 --cam1 /tmp/native/cam1.mp4 --cam2 /tmp/native/cam2.mp4 --truth /tmp/native/truth.csv --out output/alfheim_v36 --sample-fps 8.0 --calibration-seconds 4.0 --imgsz 1280 --model yolo11n.pt 2>&1 | tee output/alfheim_v36/run.log
+          python vision_v1/alfheim_benchmark_v37.py --cam0 /tmp/native/cam0.mp4 --cam1 /tmp/native/cam1.mp4 --cam2 /tmp/native/cam2.mp4 --truth /tmp/native/truth.csv --out output/alfheim_v37 --sample-fps 8.0 --calibration-seconds 4.0 --imgsz 1280 --model yolo11n.pt 2>&1 | tee output/alfheim_v37/run.log
           python - <<'PY'
           import json
           from pathlib import Path
-          m=json.loads(Path('output/alfheim_v36/metrics.json').read_text())
+          m=json.loads(Path('output/alfheim_v37/metrics.json').read_text())
           print(json.dumps(m,indent=2))
-          assert m.get('version') == 'v36-healthy-optical-lock', m.get('version')
+          assert m.get('version') == 'v37-temporal-calibration-identity-gate', m.get('version')
           assert m['matched'] == 504, m['matched']
           assert m['recall'] >= 0.90, m['recall']
           assert m['position_mae_m'] < 7.286296280008049, m['position_mae_m']
@@ -66,12 +66,12 @@ jobs:
         if: always()
         run: |
           set -euo pipefail
-          python vision_v1/alfheim_identity_diagnostic_v1.py --rows output/alfheim_v36/matched_observations.csv --truth /tmp/native/truth.csv --out output/alfheim_v36
-          cat output/alfheim_v36/identity_diagnostic.json
+          python vision_v1/alfheim_identity_diagnostic_v1.py --rows output/alfheim_v37/matched_observations.csv --truth /tmp/native/truth.csv --out output/alfheim_v37
+          cat output/alfheim_v37/identity_diagnostic.json
       - name: Upload benchmark artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: centella-alfheim-v36-healthy-optical-lock
-          path: output/alfheim_v36/
+          name: centella-alfheim-v37-temporal-calibration-identity
+          path: output/alfheim_v37/
           retention-days: 14
