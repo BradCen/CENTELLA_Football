@@ -13,7 +13,10 @@ import alfheim_benchmark_v19 as v19
 
 NATIVE_OFFSET_S = 14.248366 - 12.794293
 _ORIGINAL_TRUTH_AT = base.truth_at
-v19.truth_at = lambda truth_by, t: _ORIGINAL_TRUTH_AT(truth_by, float(t) + NATIVE_OFFSET_S)
+
+
+def truth_at_with_offset(truth_by, t: float, offset_s: float) -> list[dict]:
+    return _ORIGINAL_TRUTH_AT(truth_by, float(t) + float(offset_s))
 
 
 def main() -> None:
@@ -21,6 +24,8 @@ def main() -> None:
     ap.add_argument('--rows', required=True)
     ap.add_argument('--truth', required=True)
     ap.add_argument('--out', required=True)
+    ap.add_argument('--truth-offset-s', type=float, default=NATIVE_OFFSET_S,
+                    help='Seconds to add to row-relative time before truth lookup.')
     args = ap.parse_args()
 
     out = Path(args.out)
@@ -43,7 +48,7 @@ def main() -> None:
         t = float(row.t)
         gid = int(row.gt_id)
         pred = np.asarray([float(row.pred_x), float(row.pred_y)], float)
-        gt_rows = v19.truth_at(truth_by, t)
+        gt_rows = truth_at_with_offset(truth_by, t, args.truth_offset_s)
         if not gt_rows:
             continue
         candidates = []
@@ -82,13 +87,16 @@ def main() -> None:
         }
 
     total = len(assigned)
+    assigned_mean = float(np.mean(assigned)) if assigned else None
+    oracle_mean = float(np.mean(oracle)) if oracle else None
     result = {
-        'version': 'v1-holdout-identity-diagnostic',
+        'version': 'v2-identity-diagnostic-offset-aware',
         'samples': total,
-        'assigned_identity_accuracy': float(sum(1 for (a, b), n in conf.items() if a == b for _ in range(n)) / max(1, total)),
-        'assigned_mae_m': float(np.mean(assigned)) if assigned else None,
-        'oracle_nearest_identity_mae_m': float(np.mean(oracle)) if oracle else None,
-        'error_reduction_if_relabelled_pct': float((1.0 - np.mean(oracle) / np.mean(assigned)) * 100.0) if assigned and np.mean(assigned) > 0 else None,
+        'truth_offset_s': float(args.truth_offset_s),
+        'assigned_identity_accuracy': float(sum(n for (a, b), n in conf.items() if a == b) / max(1, total)),
+        'assigned_mae_m': assigned_mean,
+        'oracle_nearest_identity_mae_m': oracle_mean,
+        'error_reduction_if_relabelled_pct': float((1.0 - oracle_mean / assigned_mean) * 100.0) if assigned_mean and assigned_mean > 0 else None,
         'identity_switches': int(switches),
         'identity_confusions': {f'{a}->{b}': int(n) for (a, b), n in sorted(conf.items()) if a != b},
         'per_player': per_player,
