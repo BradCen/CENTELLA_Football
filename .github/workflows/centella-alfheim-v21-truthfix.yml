@@ -8,6 +8,7 @@ on:
     paths:
       - 'vision_v1/alfheim_benchmark_v26.py'
       - 'vision_v1/alfheim_benchmark_v19.py'
+      - 'vision_v1/alfheim_identity_diagnostic_v1.py'
       - '.github/workflows/centella-alfheim-v21-truthfix.yml'
 
 jobs:
@@ -59,6 +60,14 @@ jobs:
             --imgsz 1280 \
             --model yolo11n.pt 2>&1 | tee output/alfheim_v26/run.log
           cat output/alfheim_v26/metrics.json
+      - name: Diagnose holdout identity switches
+        run: |
+          set -euo pipefail
+          python vision_v1/alfheim_identity_diagnostic_v1.py \
+            --rows output/alfheim_v26/matched_observations.csv \
+            --truth /tmp/native/truth.csv \
+            --out output/alfheim_v26
+          cat output/alfheim_v26/identity_diagnostic.json
       - name: Upload benchmark artifact
         uses: actions/upload-artifact@v4
         with:
