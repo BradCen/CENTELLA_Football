@@ -9,6 +9,7 @@ import pandas as pd
 from scipy.optimize import linear_sum_assignment
 
 import alfheim_benchmark as base
+import alfheim_benchmark_v9 as v9
 import alfheim_benchmark_v10 as v10
 
 SEGMENT_VIDEO_START_S = 23.251115 - 12.794293
@@ -60,7 +61,6 @@ def framewise_geometry_eval(frames, truth_by, after_s: float):
 
 
 def map_tracks_for_evaluation(tracks, truth_by, calibration_seconds: float):
-    """Map anonymous tracks to randomized GT IDs strictly for post-hoc evaluation."""
     eligible = []
     for tr in tracks:
         cal = [o for o in tr.obs if o['t'] <= calibration_seconds]
@@ -94,12 +94,7 @@ def map_tracks_for_evaluation(tracks, truth_by, calibration_seconds: float):
         mapping[tids[r]] = target_ids[c]
         sr = np.sort(C[r])
         margin = float(sr[1] - sr[0]) if len(sr) > 1 else 99.0
-        diag.append({
-            'track_id': int(tids[r]),
-            'gt_id': int(target_ids[c]),
-            'calibration_median_m': float(C[r, c]),
-            'identity_margin_m': margin,
-        })
+        diag.append({'track_id': int(tids[r]), 'gt_id': int(target_ids[c]), 'calibration_median_m': float(C[r, c]), 'identity_margin_m': margin})
     return mapping, diag
 
 
@@ -121,18 +116,13 @@ def persistent_eval(tracks, mapping, truth_by, after_s: float):
             errors.append(e)
             by_player[gid].append(e)
     a = np.asarray(errors, float)
-    per_player = {str(g): {
-        'samples': len(v),
-        'mae_m': float(np.mean(v)) if v else None,
-        'p95_m': float(np.percentile(v, 95)) if v else None,
-    } for g, v in sorted(by_player.items())}
     return {
         'mapped_samples': len(errors),
         'mapped_tracks': len(mapping),
         'mae_m': float(a.mean()) if len(a) else None,
         'rmse_m': float(np.sqrt(np.mean(a * a))) if len(a) else None,
         'p95_m': float(np.percentile(a, 95)) if len(a) else None,
-        'per_player': per_player,
+        'per_player': {str(g): {'samples': len(v), 'mae_m': float(np.mean(v)) if v else None, 'p95_m': float(np.percentile(v, 95)) if v else None} for g, v in sorted(by_player.items())},
     }
 
 
@@ -147,7 +137,6 @@ def build_frames(cam_paths):
     frames = []
     models = {c: v10.seed_model(c) for c in cam_paths}
     keep_all = {c: _KeepAll() for c in cam_paths}
-
     for idx, t in enumerate(times):
         entries = {}
         for cam, cap in caps.items():
@@ -155,7 +144,7 @@ def build_frames(cam_paths):
             ok, frame = cap.read()
             if not ok:
                 continue
-            raw = base.detect_native(detector, frame)
+            raw = v9.detect_native(detector, frame)
             det = v10.on_pitch(cam, raw, models[cam])
             entries[cam] = {'t': float(t), 'det': det}
         fused = v10.fuse_frame(entries, keep_all, models)
@@ -176,15 +165,12 @@ def main():
     ap.add_argument('--out', required=True)
     args = ap.parse_args()
     out = Path(args.out); out.mkdir(parents=True, exist_ok=True)
-
     frames, duration = build_frames({0: args.cam0, 1: args.cam1, 2: args.cam2})
     tracks = v10.track_world(frames)
     truth_by = base.load_truth(args.truth, video_start=v10.NATIVE_START)
-
     geometry = framewise_geometry_eval(frames, truth_by, CALIBRATION_SECONDS)
     mapping, mapping_diag = map_tracks_for_evaluation(tracks, truth_by, CALIBRATION_SECONDS)
     persistent = persistent_eval(tracks, mapping, truth_by, CALIBRATION_SECONDS)
-
     rows = []
     for tr in tracks:
         gid = mapping.get(tr.tid)
@@ -197,14 +183,7 @@ def main():
             if gid not in gt:
                 continue
             q = np.asarray([gt[gid]['x'], gt[gid]['y']], float)
-            rows.append({
-                't': o['t'], 'track_id': tr.tid, 'gt_id': gid,
-                'pred_x': float(o['xy'][0]), 'pred_y': float(o['xy'][1]),
-                'truth_x': float(gt[gid]['x']), 'truth_y': float(gt[gid]['y']),
-                'position_error_m': float(np.linalg.norm(o['xy'] - q)),
-                'camera_count': len(o['cams']), 'cams': ','.join(map(str, o['cams'])),
-            })
-
+            rows.append({'t': o['t'], 'track_id': tr.tid, 'gt_id': gid, 'pred_x': float(o['xy'][0]), 'pred_y': float(o['xy'][1]), 'truth_x': float(q[0]), 'truth_y': float(q[1]), 'position_error_m': float(np.linalg.norm(o['xy'] - q)), 'camera_count': len(o['cams']), 'cams': ','.join(map(str, o['cams']))})
     result = {
         'version': 'v50-oos-anonymous-video-only-inference',
         'segment': '0059-0061',
