@@ -12,9 +12,8 @@ import alfheim_benchmark_v26 as v26
 import alfheim_benchmark_v37 as v39
 from alfheim_benchmark_v41 import recompute_position_metrics
 
-# Segment 0059 starts at 18:01:23.251115000, while the canonical truth
-# reference VIDEO_START is 18:01:12.794293. This is an OOS temporal slice;
-# parameters are inherited unchanged from V47.
+# Force-run after native downloader correction: this commit intentionally
+# retriggers the OOS workflow with the canonical 0059-0061 URLs.
 SEGMENT_VIDEO_START_S = 23.251115 - 12.794293
 V39_TRANSITION = v39.detector_correct_transition_persistence
 ALPHA = 0.05
