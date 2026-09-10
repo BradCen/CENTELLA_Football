@@ -11,6 +11,7 @@ import alfheim_benchmark_v26 as v26
 
 NATIVE_OFFSET_S = v26.NATIVE_OFFSET_S
 _ORIGINAL_TRUTH_AT = v26._ORIGINAL_TRUTH_AT
+_ORIGINAL_DETECTOR_CORRECT = v19.detector_correct
 
 
 def truth_at_native(truth_by, t):
@@ -33,7 +34,7 @@ def detector_correct_healthy_lock(states, dets, gray, model, bias, t):
             work[gid] = clone
         else:
             work[gid] = state
-    return v26.detector_correct(work, dets, gray, model, bias, t)
+    return _ORIGINAL_DETECTOR_CORRECT(work, dets, gray, model, bias, t)
 
 
 def main():
