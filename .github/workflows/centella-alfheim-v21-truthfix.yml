@@ -130,7 +130,7 @@ jobs:
         run: |
           set -euo pipefail
           if test -s output/alfheim_v49/matched_observations.csv; then
-            python vision_v1/alfheim_identity_diagnostic_v1.py --rows output/alfheim_v49/matched_observations.csv --truth /tmp/oos/truth.csv --out output/alfheim_v49
+            python vision_v1/alfheim_identity_diagnostic_v1.py --rows output/alfheim_v49/matched_observations.csv --truth /tmp/oos/truth.csv --out output/alfheim_v49 --truth-offset-s 10.456822
             cat output/alfheim_v49/identity_diagnostic.json
           fi
       - name: Upload OOS artifact
