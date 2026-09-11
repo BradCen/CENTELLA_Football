@@ -71,7 +71,9 @@ def detect_lines(frame):
     lines=cv2.HoughLinesP(edges,rho=1.0,theta=np.pi/180.0,threshold=55,minLineLength=90,maxLineGap=20)
     if lines is None: return []
     result=[]
-    for raw in lines[:,0]:
+    # OpenCV 4 commonly returns (N,1,4), while newer builds may return
+    # (N,4). Normalize both forms before iterating.
+    for raw in np.asarray(lines).reshape(-1, 4):
         x1,y1,x2,y2=map(float,raw)
         length=math.hypot(x2-x1,y2-y1)
         if length<90: continue
