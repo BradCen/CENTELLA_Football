@@ -17,7 +17,7 @@ permissions:
 jobs:
   v60-geometry-ab:
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -36,23 +36,58 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          BASE='https://datasets.simula.no/downloads/alfheim/2013-11-03/First%20Half'
+          BASE_HTTPS='https://datasets.simula.no/downloads/alfheim/2013-11-03/First%20Half'
+          BASE_HTTP='http://home.ifi.uio.no/paalh/dataset/alfheim/2013-11-03/First%20Half'
           OUT='/tmp/native'
           mkdir -p "$OUT"
-          curl_fetch() {
-            curl -fkL --connect-timeout 20 --max-time 90 --retry 8 --retry-all-errors --retry-delay 3 "$1" -o "$2"
+
+          valid_binary() {
+            local f="$1"
+            test -s "$f" || return 1
+            ! grep -aoiE '<html|<!doctype|access denied|too many requests|rate limit exceeded' "$f" | head -n 1 >/dev/null
           }
+
+          fetch_first_valid() {
+            local out="$1"; shift
+            local url
+            rm -f "$out"
+            for url in "$@"; do
+              echo "TRY $url"
+              if curl -4 -fL --connect-timeout 15 --max-time 180 --retry 3 --retry-all-errors --retry-delay 3 "$url" -o "$out" && valid_binary "$out"; then
+                echo "OK $url"
+                return 0
+              fi
+              rm -f "$out"
+            done
+            echo "FAILED all sources for $out" >&2
+            return 1
+          }
+
           for cam in 0 1 2; do
             mkdir -p "$OUT/$cam"
-            curl_fetch "$BASE/$cam/0059_2013-11-03%2018%3A01%3A23.251115000.h264" "$OUT/$cam/0059.h264"
-            curl_fetch "$BASE/$cam/0060_2013-11-03%2018%3A01%3A26.252555000.h264" "$OUT/$cam/0060.h264"
-            curl_fetch "$BASE/$cam/0061_2013-11-03%2018%3A01%3A29.253030000.h264" "$OUT/$cam/0061.h264"
-            cat "$OUT/$cam"/*.h264 > "$OUT/cam${cam}.h264"
-            ffmpeg -y -loglevel error -r 30 -i "$OUT/cam${cam}.h264" -c:v libx264 -preset ultrafast -crf 22 "$OUT/cam${cam}.mp4"
+            for spec in \
+              '0059|0059_2013-11-03%2018%3A01%3A23.251115000.h264' \
+              '0060|0060_2013-11-03%2018%3A01%3A26.252555000.h264' \
+              '0061|0061_2013-11-03%2018%3A01%3A29.253030000.h264'; do
+              seg="${spec%%|*}"
+              href="${spec#*|}"
+              fetch_first_valid \
+                "$OUT/$cam/$seg.h264" \
+                "$BASE_HTTPS/$cam/$href" \
+                "$BASE_HTTP/$cam/$href" \
+                "http://datasets.simula.no/downloads/alfheim/2013-11-03/First%20Half/$cam/$href"
+              wc -c "$OUT/$cam/$seg.h264"
+            done
+            cat "$OUT/$cam/0059.h264" "$OUT/$cam/0060.h264" "$OUT/$cam/0061.h264" > "$OUT/cam${cam}.h264"
+            ffmpeg -y -loglevel error -f h264 -r 25 -i "$OUT/cam${cam}.h264" -c:v libx264 -preset ultrafast -crf 22 -pix_fmt yuv420p "$OUT/cam${cam}.mp4"
             test -s "$OUT/cam${cam}.mp4"
           done
-          curl_fetch 'https://datasets.simula.no/downloads/alfheim/2013-11-03/zxy/2013-11-03_tromso_stromsgodset_first.csv' "$OUT/truth.csv"
-          test -s "$OUT/truth.csv"
+
+          TRUTH='https://datasets.simula.no/downloads/alfheim/2013-11-03/zxy/2013-11-03_tromso_stromsgodset_first.csv'
+          TRUTH_OLD='http://home.ifi.uio.no/paalh/dataset/alfheim/2013-11-03/zxy/2013-11-03_tromso_stromsgodset_first.csv'
+          TRUTH_HTTP='http://datasets.simula.no/downloads/alfheim/2013-11-03/zxy/2013-11-03_tromso_stromsgodset_first.csv'
+          fetch_first_valid "$OUT/truth.csv" "$TRUTH" "$TRUTH_OLD" "$TRUTH_HTTP"
+          head -n 2 "$OUT/truth.csv"
 
       - name: Run V60 image-only geometry A/B
         env:
