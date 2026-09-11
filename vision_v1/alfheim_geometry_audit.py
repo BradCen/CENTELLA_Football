@@ -8,7 +8,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from alfheim_benchmark_v9 import seed_model
+from alfheim_seed_geometry import seed_model
 
 
 def field_segments(n_circle: int = 96):
