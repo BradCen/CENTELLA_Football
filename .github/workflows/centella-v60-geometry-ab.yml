@@ -1,6 +1,7 @@
 name: CENTELLA V60 Geometry A/B Benchmark
 
 on:
+  # V60 rerun trigger after the OpenCV HoughLinesP compatibility fix.
   push:
     branches: [centella-v24-football-intelligence]
     paths:
