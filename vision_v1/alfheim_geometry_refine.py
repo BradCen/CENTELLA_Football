@@ -8,7 +8,7 @@ import cv2
 import numpy as np
 from scipy.optimize import minimize
 
-from alfheim_benchmark_v9 import SEED, seed_model
+from alfheim_seed_geometry import SEED, seed_model
 from alfheim_geometry_audit import detect_lines, field_segments, nearest_field_line, project
 
 
@@ -110,8 +110,6 @@ def refine(video: str, cam: int, sample_count: int = 6):
     anchor_shift = np.linalg.norm(refined_anchor - seed_anchor, axis=1)
     improvement = (base_score - refined_score) / max(base_score, 1e-9)
 
-    # Image-only acceptance gate: require a meaningful line-fit improvement and
-    # keep the known seed landmarks from moving by more than a few metres.
     accepted = bool(result.success and improvement >= 0.05 and float(np.max(anchor_shift)) <= 3.0)
     chosen = H1 if accepted else H0
     return {
