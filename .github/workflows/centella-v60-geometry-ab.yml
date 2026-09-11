@@ -1,0 +1,93 @@
+name: CENTELLA V60 Geometry A/B Benchmark
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'vision_v1/alfheim_benchmark_v56_oos_globaltrack.py'
+      - 'vision_v1/alfheim_geometry_audit.py'
+      - 'vision_v1/alfheim_geometry_refine.py'
+      - 'vision_v1/alfheim_benchmark_v60_geometry_ab.py'
+      - '.github/workflows/centella-v60-geometry-ab.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  v60-geometry-ab:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install runtime
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+          python -m pip install --upgrade pip
+          pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+          pip install ultralytics scipy pandas opencv-python-headless
+
+      - name: Acquire exact OOS segments 0059-0061
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE='https://datasets.simula.no/downloads/alfheim/2013-11-03/First%20Half'
+          OUT='/tmp/native'
+          mkdir -p "$OUT"
+          curl_fetch() {
+            curl -fkL --connect-timeout 20 --max-time 90 --retry 8 --retry-all-errors --retry-delay 3 "$1" -o "$2"
+          }
+          for cam in 0 1 2; do
+            mkdir -p "$OUT/$cam"
+            curl_fetch "$BASE/$cam/0059_2013-11-03%2018%3A01%3A23.251115000.h264" "$OUT/$cam/0059.h264"
+            curl_fetch "$BASE/$cam/0060_2013-11-03%2018%3A01%3A26.252555000.h264" "$OUT/$cam/0060.h264"
+            curl_fetch "$BASE/$cam/0061_2013-11-03%2018%3A01%3A29.253030000.h264" "$OUT/$cam/0061.h264"
+            cat "$OUT/$cam"/*.h264 > "$OUT/cam${cam}.h264"
+            ffmpeg -y -loglevel error -r 30 -i "$OUT/cam${cam}.h264" -c:v libx264 -preset ultrafast -crf 22 "$OUT/cam${cam}.mp4"
+            test -s "$OUT/cam${cam}.mp4"
+          done
+          curl_fetch 'https://datasets.simula.no/downloads/alfheim/2013-11-03/zxy/2013-11-03_tromso_stromsgodset_first.csv' "$OUT/truth.csv"
+          test -s "$OUT/truth.csv"
+
+      - name: Run V60 image-only geometry A/B
+        env:
+          PYTHONPATH: vision_v1
+        run: |
+          python vision_v1/alfheim_benchmark_v60_geometry_ab.py \
+            --cam0 /tmp/native/cam0.mp4 \
+            --cam1 /tmp/native/cam1.mp4 \
+            --cam2 /tmp/native/cam2.mp4 \
+            --truth /tmp/native/truth.csv \
+            --out output/alfheim_v60
+
+      - name: Guard benchmark integrity
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p = Path('output/alfheim_v60/comparison.json')
+          d = json.loads(p.read_text())
+          assert d['inference_uses_ground_truth'] is False
+          for side in ('baseline', 'geometry_refined'):
+              assert side in d
+              assert 'mapped_holdout' in d[side]
+              assert 'anonymous' in d[side]
+              assert 'framewise' in d[side]
+          print('V60 integrity guard passed')
+          PY
+
+      - name: Upload V60 report
+        uses: actions/upload-artifact@v4
+        with:
+          name: centella-alfheim-v60-geometry-ab
+          path: output/alfheim_v60/
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 6
