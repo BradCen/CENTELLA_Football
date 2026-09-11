@@ -66,3 +66,4 @@ jobs:
           name: centella-alfheim-v58-oos-validityset
           path: output/alfheim_v58/
           retention-days: 14
+# force workflow execution on branch head
