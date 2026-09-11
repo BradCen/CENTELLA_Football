@@ -8,6 +8,7 @@ on:
       - '.github/workflows/centella-alfheim-v59-oos-trackset-consensus.yml'
   workflow_dispatch:
 
+# re-run marker: 2026-09-11T11:xxZ
 jobs:
   benchmark:
     name: V59 OOS anonymous track-set consensus 0059-0061
@@ -15,11 +16,9 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-
       - name: Install CPU runtime
         run: |
           set -euo pipefail
@@ -28,18 +27,12 @@ jobs:
           python -m pip install --upgrade pip
           pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
           pip install ultralytics scipy pandas opencv-python-headless
-
       - name: Download OOS native segments 0059-0061 and truth
         run: |
           set -euxo pipefail
           BASE_PATH='/downloads/alfheim/2013-11-03/First%20Half'
-          # Simula currently exposes the Alfheim dataset through a single
-          # dataset host; runners occasionally lose the host route. Try the
-          # canonical HTTPS/HTTP endpoints, the published service IP, and its
-          # CNAME before failing. The bytes are verified after every transfer.
           CURL=(curl -4 -fkL --connect-timeout 15 --max-time 180 --retry 2 --retry-all-errors --retry-delay 2)
           mkdir -p /tmp/oos output/alfheim_v59
-
           download() {
             local rel="$1" out="$2"
             local urls=(
@@ -57,32 +50,21 @@ jobs:
               fi
               rm -f "$out"
             done
-            # Last resort: direct IPv4 with the original Host/SNI name. This
-            # avoids DNS/routing issues while preserving the virtual-host route.
-            local encoded_host='datasets.simula.no'
             for proto in https http; do
               local url="${proto}://128.39.36.14${rel}"
-              echo "TRY $url via Host: $encoded_host"
+              echo "TRY $url via Host: datasets.simula.no"
               if [ "$proto" = https ]; then
                 if curl -4 -fkL --connect-timeout 15 --max-time 180 --retry 2 --retry-all-errors --retry-delay 2 \
-                  --resolve datasets.simula.no:443:128.39.36.14 \
-                  "$url" -H "Host: $encoded_host" -o "$out" && test -s "$out"; then
-                  echo "OK $url"
-                  return 0
-                fi
+                  --resolve datasets.simula.no:443:128.39.36.14 "$url" -H 'Host: datasets.simula.no' -o "$out" && test -s "$out"; then return 0; fi
               else
                 if curl -4 -fL --connect-timeout 15 --max-time 180 --retry 2 --retry-all-errors --retry-delay 2 \
-                  "$url" -H "Host: $encoded_host" -o "$out" && test -s "$out"; then
-                  echo "OK $url"
-                  return 0
-                fi
+                  "$url" -H 'Host: datasets.simula.no' -o "$out" && test -s "$out"; then return 0; fi
               fi
               rm -f "$out"
             done
             echo "ERROR unable to download $rel" >&2
             return 1
           }
-
           for cam in 0 1 2; do
             for spec in \
               '0059|0059_2013-11-03%2018%3A01%3A23.251115000.h264' \
@@ -97,7 +79,6 @@ jobs:
           done
           download '/downloads/alfheim/2013-11-03/zxy/2013-11-03_tromso_stromsgodset_first.csv' /tmp/oos/truth.csv
           test -s /tmp/oos/truth.csv
-
       - name: Run V59 anonymous track-set consensus benchmark
         run: |
           set -euo pipefail
@@ -113,7 +94,6 @@ jobs:
           assert m['selected_tracks'] > 0
           assert m['anonymous_tracking_diagnostics']['evaluated_samples'] > 0
           PY
-
       - uses: actions/upload-artifact@v4
         if: always()
         with:
