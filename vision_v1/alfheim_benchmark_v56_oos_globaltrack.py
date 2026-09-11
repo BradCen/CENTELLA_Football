@@ -187,7 +187,7 @@ def main():
             p=gd/f'cam{cam}_geometry_refinement.json'
             if p.exists():
                 info=json.loads(p.read_text()); H=info.get('chosen_h')
-                if H is not None: models[cam]=v10.CameraModel(np.asarray(H,float),None)
+                if H is not None: models[cam]=v9.CameraModel(np.asarray(H,float),None)
     frames,dur,diag=build({0:a.cam0,1:a.cam1,2:a.cam2},models=models);tb=base.load_truth(a.truth,video_start=v10.NATIVE_START)
     tracks=extract_tracks(frames,10);mapping,mapdiag=calibration_mapping(tracks,tb);mm,rows=mapped_eval(tracks,mapping,tb)
     r={'version':'v56-oos-global-anonymous-track-extraction','segment':'0059-0061','duration_s':dur,'sample_fps':FPS,'calibration_seconds':CAL,'inference_uses_ground_truth':False,'truth_usage':'ground truth is used only after anonymous trajectories are constructed for diagnostics/evaluation','geometry_models_loaded':sorted(models.keys()),'detector_thresholds':{'red':RED,'confidence':CONF,'min_height_px':MIN_H,'top_k_per_camera':TOP},'tracking_parameters':{'target_track_count':10,'max_speed_m_s':MAX_SPEED,'max_gap_s':MAX_GAP_S,'skip_penalty':SKIP_PENALTY,'birth_penalty':BIRTH_PENALTY,'appearance_weight':APP_WEIGHT},'framewise_geometry_evaluation':framewise_eval(frames,tb),'anonymous_tracking_diagnostics':anonymous_eval(tracks,tb),'calibration_mapped_holdout_evaluation':mm,'track_identity_mapping':mapdiag,'track_count_extracted':len(tracks),'track_lengths':[len(t['obs']) for t in tracks],'detector_selection_diagnostics':diag}
