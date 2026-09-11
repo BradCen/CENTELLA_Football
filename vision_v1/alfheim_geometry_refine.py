@@ -6,125 +6,195 @@ from pathlib import Path
 
 import cv2
 import numpy as np
-from scipy.optimize import minimize
+from scipy.optimize import least_squares
 
 from alfheim_seed_geometry import SEED, seed_model
 from alfheim_geometry_audit import detect_lines, field_segments, nearest_field_line, project
 
 
-def collect_line_points(video: str, cam: int, sample_count: int = 6):
+def straight_field_segments():
+    return [
+        (a, b, tag) for a, b, tag in field_segments()
+        if tag != "center_circle"
+    ]
+
+
+def line_to_world_seed(H0, line):
+    w = project(H0, line)
+    if not np.all(np.isfinite(w)) or np.max(np.abs(w)) > 250:
+        return None
+    return w
+
+
+def line_equation(a, b):
+    v = b - a
+    n = np.array([-v[1], v[0]], float)
+    norm = float(np.linalg.norm(n))
+    if norm < 1e-9:
+        return None
+    n /= norm
+    c = -float(np.dot(n, a))
+    return n, c
+
+
+def collect_line_constraints(video: str, cam: int, sample_count: int = 4):
     cap = cv2.VideoCapture(video)
     if not cap.isOpened():
         raise RuntimeError(f"cannot open video: {video}")
     fps = float(cap.get(cv2.CAP_PROP_FPS) or 25.0)
     n = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
     duration = n / max(fps, 1e-6)
-    times = np.linspace(0.0, max(0.001, duration - 0.04), max(1, sample_count))
+    times = np.linspace(0.0, max(0.001, duration - 0.04), max(2, sample_count))
     H0 = seed_model(cam).H
-    segments = field_segments()
-    chunks = []
+    segments = straight_field_segments()
+    constraints = []
     for t in times:
         cap.set(cv2.CAP_PROP_POS_MSEC, float(t * 1000.0))
         ok, frame = cap.read()
         if not ok:
             continue
         for line in detect_lines(frame):
-            w = project(H0, line)
-            if not np.all(np.isfinite(w)) or np.max(np.abs(w)) > 250:
+            world = line_to_world_seed(H0, line)
+            if world is None:
                 continue
-            d, _ = nearest_field_line(w, segments)
-            if float(np.mean(d)) > 5.5:
+            d, _ = nearest_field_line(world, segments)
+            mean_d = float(np.mean(d))
+            if mean_d > 4.5:
                 continue
-            samples = np.linspace(0.08, 0.92, 7)
-            pts = line[0][None, :] * (1.0 - samples[:, None]) + line[1][None, :] * samples[:, None]
-            chunks.append((pts, float(np.linalg.norm(line[1] - line[0]))))
+            eq_candidates = []
+            obs_eq = line_equation(world[0], world[1])
+            if obs_eq is None:
+                continue
+            on, oc = obs_eq
+            obs_dir = world[1] - world[0]
+            obs_dir /= max(float(np.linalg.norm(obs_dir)), 1e-9)
+            for a, b, tag in segments:
+                field_dir = b - a
+                field_dir /= max(float(np.linalg.norm(field_dir)), 1e-9)
+                parallel = abs(float(np.dot(obs_dir, field_dir)))
+                pa = float(np.linalg.norm(world[0] - a))
+                pb = float(np.linalg.norm(world[1] - b))
+                da = float(point_distance_to_infinite_line(world[0], a, b))
+                db = float(point_distance_to_infinite_line(world[1], a, b))
+                score = 3.0 * mean_d + 2.0 * (1.0 - parallel) + 0.15 * min(pa, pb) + 0.5 * (da + db)
+                eq_candidates.append((score, a, b, tag))
+            if not eq_candidates:
+                continue
+            _, a, b, tag = min(eq_candidates, key=lambda x: x[0])
+            eq = line_equation(a, b)
+            if eq is None:
+                continue
+            nvec, c = eq
+            img_pts = np.linspace(0.1, 0.9, 5)[:, None]
+            pts = line[0][None, :] * (1.0 - img_pts) + line[1][None, :] * img_pts
+            constraints.append({
+                "points": pts.reshape(-1, 2),
+                "normal": nvec,
+                "c": c,
+                "weight": max(float(np.linalg.norm(line[1] - line[0])), 1.0),
+                "tag": tag,
+            })
     cap.release()
-    if not chunks:
-        return np.empty((0, 2), float), np.empty((0,), float)
-    pts = np.concatenate([x[0] for x in chunks], axis=0)
-    weights = np.concatenate([np.full(len(x[0]), x[1], float) for x in chunks])
-    return pts, weights
+    return constraints
 
 
-def objective_factory(H0, points, weights, anchors, anchor_world, segments):
-    scale = np.maximum(np.abs(H0).flatten()[:8], 1e-3)
+def point_distance_to_infinite_line(p, a, b):
+    eq = line_equation(a, b)
+    if eq is None:
+        return 999.0
+    n, c = eq
+    return abs(float(np.dot(n, p) + c))
 
-    def unpack(p):
-        H = np.asarray(H0, float).copy().flatten()
-        H[:8] += np.asarray(p, float) * scale
-        H = H.reshape(3, 3)
-        if abs(H[2, 2]) < 1e-8:
-            return None
-        return H / H[2, 2]
 
-    def objective(p):
-        H = unpack(p)
+def unpack(H0, p):
+    H = np.asarray(H0, float).reshape(3, 3).copy().flatten()
+    scale = np.maximum(np.abs(np.asarray(H0, float).reshape(3, 3).flatten()[:8]), 1e-3)
+    H[:8] += np.asarray(p, float) * scale
+    H = H.reshape(3, 3)
+    if abs(H[2, 2]) < 1e-8:
+        return None
+    return H / H[2, 2]
+
+
+def residuals_factory(H0, constraints, anchors, anchor_world):
+    scale = np.maximum(np.abs(np.asarray(H0, float).reshape(3, 3).flatten()[:8]), 1e-3)
+
+    def unpack_local(p):
+        return unpack(H0, p)
+
+    def residuals(p):
+        H = unpack_local(p)
         if H is None:
-            return 1e6
-        world = project(H, points)
-        if not np.all(np.isfinite(world)):
-            return 1e6
-        inside = (world[:, 0] > -6) & (world[:, 0] < 111) & (world[:, 1] > -6) & (world[:, 1] < 74)
-        if inside.mean() < 0.75:
-            return 1e5 + 1e4 * (0.75 - inside.mean())
-        d, _ = nearest_field_line(world, segments)
-        d = np.minimum(d, 12.0)
-        w = np.asarray(weights, float)
-        fit = float(np.average(d * d, weights=w))
+            return np.full(64, 1e3, float)
+        out = []
+        for item in constraints:
+            world = project(H, item["points"])
+            nvec = item["normal"]
+            vals = world @ nvec + item["c"]
+            out.extend((vals * np.sqrt(item["weight"])).tolist())
         aw = project(H, anchors)
-        anchor_err = np.linalg.norm(aw - anchor_world, axis=1)
-        regularized = fit + 0.035 * float(np.mean(anchor_err * anchor_err))
-        return regularized
+        anchor_delta = (aw - anchor_world).reshape(-1)
+        out.extend((0.20 * anchor_delta).tolist())
+        return np.asarray(out, float)
 
-    return objective, unpack
+    return residuals
 
 
-def refine(video: str, cam: int, sample_count: int = 6):
+def refine(video: str, cam: int, sample_count: int = 4):
     H0 = seed_model(cam).H
-    points, weights = collect_line_points(video, cam, sample_count)
-    if len(points) < 40:
+    constraints = collect_line_constraints(video, cam, sample_count)
+    if len(constraints) < 8:
         return {
             "accepted": False,
-            "reason": "insufficient line evidence",
-            "points": int(len(points)),
+            "reason": "insufficient line constraints",
+            "constraints": int(len(constraints)),
             "seed_h": H0.tolist(),
         }
 
     sp, sw = SEED[cam]
-    segments = field_segments()
-    objective, unpack = objective_factory(H0, points, weights, sp, sw, segments)
-    base_score = objective(np.zeros(8))
-    result = minimize(
-        objective,
-        np.zeros(8),
-        method="Nelder-Mead",
-        options={"maxiter": 900, "xatol": 1e-7, "fatol": 1e-5, "adaptive": True},
+    residuals = residuals_factory(H0, constraints, sp, sw)
+    p0 = np.zeros(8, float)
+    base = float(np.mean(residuals(p0) ** 2))
+    result = least_squares(
+        residuals,
+        p0,
+        method="trf",
+        loss="soft_l1",
+        f_scale=0.75,
+        max_nfev=120,
+        xtol=1e-7,
+        ftol=1e-7,
+        gtol=1e-7,
     )
-    H1 = unpack(result.x)
+    H1 = unpack(H0, result.x)
     if H1 is None:
-        return {"accepted": False, "reason": "optimizer produced invalid homography", "points": int(len(points)), "seed_h": H0.tolist()}
-
-    refined_score = objective(result.x)
+        return {
+            "accepted": False,
+            "reason": "optimizer produced invalid homography",
+            "constraints": int(len(constraints)),
+            "seed_h": H0.tolist(),
+        }
+    refined = float(np.mean(residuals(result.x) ** 2))
     seed_anchor = project(H0, sp)
     refined_anchor = project(H1, sp)
     anchor_shift = np.linalg.norm(refined_anchor - seed_anchor, axis=1)
-    improvement = (base_score - refined_score) / max(base_score, 1e-9)
-
+    improvement = (base - refined) / max(base, 1e-9)
     accepted = bool(result.success and improvement >= 0.05 and float(np.max(anchor_shift)) <= 3.0)
     chosen = H1 if accepted else H0
     return {
         "accepted": accepted,
+        "optimizer": "scipy.least_squares_soft_l1_line_residuals",
         "optimizer_success": bool(result.success),
         "optimizer_message": str(result.message),
-        "points": int(len(points)),
-        "base_objective": float(base_score),
-        "refined_objective": float(refined_score),
+        "constraints": int(len(constraints)),
+        "base_objective": base,
+        "refined_objective": refined,
         "relative_improvement": float(improvement),
         "max_seed_anchor_shift_m": float(np.max(anchor_shift)),
         "seed_h": H0.tolist(),
         "refined_h": H1.tolist(),
         "chosen_h": np.asarray(chosen, float).tolist(),
-        "note": "No ZXY/ground truth is used. This is a geometry-only candidate generator; it must still be benchmarked end-to-end on the OOS set before claiming an accuracy gain.",
+        "note": "Image-only line/geometry refinement. Ground truth is not consumed during inference. Fast bounded least-squares replaces the previous expensive nearest-segment Nelder-Mead loop.",
     }
 
 
@@ -133,7 +203,7 @@ def main():
     ap.add_argument("--video", required=True)
     ap.add_argument("--cam", type=int, required=True, choices=[0, 1, 2])
     ap.add_argument("--out", required=True)
-    ap.add_argument("--samples", type=int, default=6)
+    ap.add_argument("--samples", type=int, default=4)
     args = ap.parse_args()
     result = refine(args.video, args.cam, args.samples)
     out = Path(args.out)
