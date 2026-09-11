@@ -52,7 +52,7 @@ jobs:
           valid_binary() {
             local f="$1"
             test -s "$f" || return 1
-            ! grep -aoiE '<html|<!doctype|access denied|too many requests|rate limit exceeded' "$f" | head -n 1 >/dev/null
+            ! grep -aoiE '<html|<!doctype|access denied|too many requests|rate limit exceeded|not found' "$f" | head -n 1 >/dev/null
           }
 
           fetch_first_valid() {
@@ -61,7 +61,7 @@ jobs:
             rm -f "$out"
             for url in "$@"; do
               echo "TRY $url"
-              if curl -4 -fL --connect-timeout 15 --max-time 180 --retry 3 --retry-all-errors --retry-delay 3 "$url" -o "$out" && valid_binary "$out"; then
+              if curl -4 -k -fL --connect-timeout 15 --max-time 180 --retry 3 --retry-all-errors --retry-delay 3 "$url" -o "$out" && valid_binary "$out"; then
                 echo "OK $url"
                 return 0
               fi
