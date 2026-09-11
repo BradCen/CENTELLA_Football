@@ -1,4 +1,5 @@
 from __future__ import annotations
+# V58 rerun trigger: anonymous validity-gated trajectory selection remains GT-free.
 import argparse,json,math
 from collections import defaultdict
 from pathlib import Path
@@ -27,21 +28,15 @@ def path_features(tr):
     near_zero=float(np.mean(dif<0.08))
     speed=float(np.mean(dif/.125)) if len(dif) else 0.
     spatial_span=float(np.linalg.norm(np.ptp(xy,axis=0))) if len(xy)>1 else 0.
-    invalid = []
+    invalid=[]
     if len(obs)<MIN_LEN: invalid.append('short')
     if near_zero>=STATIC_LIMIT and spatial_span<1.0: invalid.append('static')
-    # A trajectory sitting inside the two-metre boundary band for almost its
-    # whole life is overwhelmingly more likely to be a bench/board/staff false
-    # positive than an on-pitch player. Keep a moving sideline player only when
-    # there is evidence from more than one camera.
     if edge_frac>=EDGE_LIMIT and len(cams)<2 and speed<0.65: invalid.append('edge_static')
-    score=(1.05*math.log1p(len(obs))+.9*conf+.32*min(2,len(cams))
-           -1.45*edge_frac-1.35*corner_frac-.55*near_zero
-           +.08*min(3.,speed))
+    score=(1.05*math.log1p(len(obs))+.9*conf+.32*min(2,len(cams))-1.45*edge_frac-1.35*corner_frac-.55*near_zero+.08*min(3.,speed))
     return {'score':float(score),'valid':not invalid,'reason':','.join(invalid),'length':len(obs),'mean_conf':conf,'camera_count':len(cams),'edge_fraction':edge_frac,'corner_fraction':corner_frac,'near_zero_fraction':near_zero,'mean_speed_m_s':speed,'spatial_span_m':spatial_span}
 
 def conflict(a,b,radius=2.5):
-    A={round(o['t'],3):o['xy'] for o in a['obs']}; B={round(o['t'],3):o['xy'] for o in b['obs']}; common=set(A)&set(B)
+    A={round(o['t'],3):o['xy'] for o in a['obs']};B={round(o['t'],3):o['xy'] for o in b['obs']};common=set(A)&set(B)
     if not common:return 0.0
     return float(np.mean([np.linalg.norm(A[t]-B[t])<radius for t in common]))
 
@@ -71,7 +66,7 @@ def main():
         candidates.append({'track_id':tid,'obs':obs})
     tracks=select_global(candidates,10)
     tb=base.load_truth(a.truth,video_start=v56.v9.NATIVE_START)
-    anon=v56.anonymous_eval(tracks,tb); mapping,mapdiag=v56.calibration_mapping(tracks,tb); mm,rows=v56.mapped_eval(tracks,mapping,tb); ff=v56.framewise_eval(frames,tb)
+    anon=v56.anonymous_eval(tracks,tb);mapping,mapdiag=v56.calibration_mapping(tracks,tb);mm,rows=v56.mapped_eval(tracks,mapping,tb);ff=v56.framewise_eval(frames,tb)
     r={'version':'v58-oos-global-anonymous-validity-gated-set','segment':'0059-0061','duration_s':dur,'sample_fps':v56.FPS,'calibration_seconds':CAL,'inference_uses_ground_truth':False,'truth_usage':'ground truth is used only after anonymous trajectories are constructed for diagnostics/evaluation','validity_policy':{'min_track_length':MIN_LEN,'edge_fraction_limit':EDGE_LIMIT,'static_fraction_limit':STATIC_LIMIT,'edge_static_requires_multi_camera':True},'candidate_tracks':len(candidates),'valid_candidate_tracks':sum(path_features(t)['valid'] for t in candidates),'selected_tracks':len(tracks),'candidate_scores':[{'track_id':int(t['track_id']),'features':path_features(t)} for t in candidates],'selected_source_track_ids':[int(t['track_id']) for t in tracks],'framewise_geometry_evaluation':ff,'anonymous_tracking_diagnostics':anon,'calibration_mapped_holdout_evaluation':mm,'track_identity_mapping':mapdiag,'track_lengths':[len(t['obs']) for t in tracks],'detector_selection_diagnostics':diag}
     (out/'metrics.json').write_text(json.dumps(r,indent=2));pd.DataFrame(rows).to_csv(out/'matched_observations.csv',index=False);pd.DataFrame([{'track_id':t['track_id'],'samples':len(t['obs']),'score':path_features(t)['score']} for t in tracks]).to_csv(out/'tracks_summary.csv',index=False);print(json.dumps(r,indent=2),flush=True)
 
