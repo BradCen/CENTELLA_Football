@@ -1,6 +1,14 @@
 name: CENTELLA V60 Geometry A/B Benchmark
 
 on:
+  push:
+    branches: [centella-v24-football-intelligence]
+    paths:
+      - 'vision_v1/alfheim_benchmark_v56_oos_globaltrack.py'
+      - 'vision_v1/alfheim_geometry_audit.py'
+      - 'vision_v1/alfheim_geometry_refine.py'
+      - 'vision_v1/alfheim_benchmark_v60_geometry_ab.py'
+      - '.github/workflows/centella-v60-geometry-ab.yml'
   pull_request:
     branches: [main]
     paths:
