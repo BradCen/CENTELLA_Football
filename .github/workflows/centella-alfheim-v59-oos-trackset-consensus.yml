@@ -16,7 +16,7 @@ on:
 jobs:
   benchmark:
     name: V59 OOS anonymous track-set consensus 0059-0061
-    runs-on: macos-latest
+    runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
@@ -26,66 +26,86 @@ jobs:
       - name: Install CPU runtime
         run: |
           set -euo pipefail
-          brew install ffmpeg || true
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg file
           python -m pip install --upgrade pip
           pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
           pip install ultralytics scipy pandas opencv-python-headless
+      - name: Probe network and proxy acquisition
+        run: |
+          set -u
+          target='https://datasets.simula.no/downloads/alfheim/2013-11-03/First%20Half/0/0059_2013-11-03%2018%3A01%3A23.251115000.h264'
+          encoded="$(python -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=""))' "$target")"
+          mkdir -p /tmp/oos output/alfheim_v59
+          echo "DIRECT TARGET: $target"
+          echo "PROXY TARGET: https://api.cors.lol/?url=$encoded"
+          echo '--- direct HEAD ---'
+          curl -4 -skIL --connect-timeout 8 --max-time 20 "$target" | head -n 20 || true
+          echo '--- cors.lol HEAD ---'
+          curl -4 -skIL --connect-timeout 8 --max-time 20 "https://api.cors.lol/?url=$encoded" | head -n 30 || true
+          echo '--- cors.lol sample GET ---'
+          curl -4 -skL --connect-timeout 8 --max-time 30 -r 0-65535 "https://api.cors.lol/?url=$encoded" -o /tmp/oos/probe.bin || true
+          test -s /tmp/oos/probe.bin || true
+          if test -s /tmp/oos/probe.bin; then
+            wc -c /tmp/oos/probe.bin
+            file /tmp/oos/probe.bin || true
+            xxd -l 32 /tmp/oos/probe.bin || true
+          fi
       - name: Download OOS native segments 0059-0061 and truth
         run: |
           set -euo pipefail
           BASE_PATH='/downloads/alfheim/2013-11-03/First%20Half'
           CURL=(curl -4 -fkL --connect-timeout 15 --max-time 180 --retry 2 --retry-all-errors --retry-delay 2)
           mkdir -p /tmp/oos output/alfheim_v59
+          proxy_url() {
+            python -c 'import urllib.parse,sys; print("https://api.cors.lol/?url=" + urllib.parse.quote(sys.argv[1], safe=""))' "$1"
+          }
+          valid_binary() {
+            test -s "$1" && ! grep -aoiE '<html|<!doctype|access denied|too many requests' "$1" | head -n 1 >/dev/null
+          }
           download() {
             local rel="$1" out="$2"
             local target="https://datasets.simula.no${rel}"
-            local urls=(
-              "$target"
-              "http://datasets.simula.no${rel}"
-              "https://webhotel.simula.no${rel}"
-              "http://webhotel.simula.no${rel}"
-              "https://api.allorigins.win/raw?url=$(python - <<PY
-import urllib.parse
-print(urllib.parse.quote('''$target''', safe=''))
-PY
-)"
-              "https://corsproxy.io/?url=$(python - <<PY
-import urllib.parse
-print(urllib.parse.quote('''$target''', safe=''))
-PY
-)"
-            )
+            local p1 p2
+            p1="$(proxy_url "$target")"
+            p2="https://api.allorigins.win/raw?url=$(python -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=""))' "$target")"
+            local urls=("$target" "$p1" "$p2" "https://webhotel.simula.no${rel}")
             local u
             for u in "${urls[@]}"; do
               echo "TRY $u"
-              if "${CURL[@]}" "$u" -o "$out" && test -s "$out"; then
+              rm -f "$out"
+              if "${CURL[@]}" "$u" -o "$out" && valid_binary "$out"; then
                 echo "OK $u"
                 return 0
               fi
-              rm -f "$out"
             done
-            for proto in https http; do
-              local url="${proto}://128.39.36.14${rel}"
-              echo "TRY $url via Host: datasets.simula.no"
-              if [ "$proto" = https ]; then
-                if curl -4 -fkL --connect-timeout 15 --max-time 180 --retry 2 --retry-all-errors --retry-delay 2 --resolve datasets.simula.no:443:128.39.36.14 "$url" -H 'Host: datasets.simula.no' -o "$out" && test -s "$out"; then return 0; fi
-              else
-                if curl -4 -fL --connect-timeout 15 --max-time 180 --retry 2 --retry-all-errors --retry-delay 2 "$url" -H 'Host: datasets.simula.no' -o "$out" && test -s "$out"; then return 0; fi
-              fi
-              rm -f "$out"
-            done
+            echo "FAILED $target" >&2
             return 1
           }
           for cam in 0 1 2; do
             for spec in '0059|0059_2013-11-03%2018%3A01%3A23.251115000.h264' '0060|0060_2013-11-03%2018%3A01%3A26.252555000.h264' '0061|0061_2013-11-03%2018%3A01%3A29.253030000.h264'; do
               seg="${spec%%|*}"; href="${spec#*|}"
               download "$BASE_PATH/$cam/$href" "/tmp/oos/cam${cam}_${seg}.h264"
+              wc -c "/tmp/oos/cam${cam}_${seg}.h264"
             done
             cat "/tmp/oos/cam${cam}_0059.h264" "/tmp/oos/cam${cam}_0060.h264" "/tmp/oos/cam${cam}_0061.h264" > "/tmp/oos/cam${cam}.h264"
-            ffmpeg -y -r 25 -i "/tmp/oos/cam${cam}.h264" -c:v libx264 -preset ultrafast -crf 22 -pix_fmt yuv420p "/tmp/oos/cam${cam}.mp4"
+            ffmpeg -y -f h264 -r 25 -i "/tmp/oos/cam${cam}.h264" -c:v libx264 -preset ultrafast -crf 22 -pix_fmt yuv420p "/tmp/oos/cam${cam}.mp4"
             test -s "/tmp/oos/cam${cam}.mp4"
           done
-          download '/downloads/alfheim/2013-11-03/zxy/2013-11-03_tromso_stromsgodset_first.csv' /tmp/oos/truth.csv
+          truth='https://datasets.simula.no/downloads/alfheim/2013-11-03/zxy/2013-11-03_tromso_stromsgodset_first.csv'
+          truth_proxy="$(proxy_url "$truth")"
+          truth_alt="https://api.allorigins.win/raw?url=$(python -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=""))' "$truth")"
+          for u in "$truth" "$truth_proxy" "$truth_alt" "http://datasets.simula.no/downloads/alfheim/2013-11-03/zxy/2013-11-03_tromso_stromsgodset_first.csv"; do
+            echo "TRY TRUTH $u"
+            rm -f /tmp/oos/truth.csv
+            if "${CURL[@]}" "$u" -o /tmp/oos/truth.csv && test -s /tmp/oos/truth.csv; then
+              head -n 2 /tmp/oos/truth.csv
+              if ! grep -qi '<html\|<!doctype\|access denied' /tmp/oos/truth.csv; then
+                echo "OK TRUTH $u"
+                break
+              fi
+            fi
+          done
           test -s /tmp/oos/truth.csv
       - name: Run V59 anonymous track-set consensus benchmark
         run: |
