@@ -1,4 +1,4 @@
-name: CENTELLA V60/V61 Final Benchmark
+name: CENTELLA V60/V61/V62 Final Benchmark
 
 on:
   push:
@@ -6,6 +6,7 @@ on:
     paths:
       - 'vision_v1/alfheim_benchmark_v56_oos_globaltrack.py'
       - 'vision_v1/alfheim_benchmark_v61_finaltrack.py'
+      - 'vision_v1/alfheim_benchmark_v62_finaltrack.py'
       - 'vision_v1/alfheim_geometry_audit.py'
       - 'vision_v1/alfheim_geometry_refine.py'
       - 'vision_v1/alfheim_benchmark_v60_geometry_ab.py'
@@ -15,6 +16,7 @@ on:
     paths:
       - 'vision_v1/alfheim_benchmark_v56_oos_globaltrack.py'
       - 'vision_v1/alfheim_benchmark_v61_finaltrack.py'
+      - 'vision_v1/alfheim_benchmark_v62_finaltrack.py'
       - 'vision_v1/alfheim_geometry_audit.py'
       - 'vision_v1/alfheim_geometry_refine.py'
       - 'vision_v1/alfheim_benchmark_v60_geometry_ab.py'
@@ -25,7 +27,7 @@ permissions:
   contents: read
 
 jobs:
-  v60-v61-final:
+  final-benchmark:
     runs-on: ubuntu-24.04
     timeout-minutes: 35
     steps:
@@ -98,14 +100,21 @@ jobs:
         run: |
           python vision_v1/alfheim_benchmark_v60_geometry_ab.py --cam0 /tmp/native/cam0.mp4 --cam1 /tmp/native/cam1.mp4 --cam2 /tmp/native/cam2.mp4 --truth /tmp/native/truth.csv --out output/alfheim_v60
 
-      - name: Run V61 final causal tracker on V60 geometry
+      - name: Run V61 causal spatial suppression
         env:
           PYTHONPATH: vision_v1
           PYTHONUNBUFFERED: '1'
         run: |
           python vision_v1/alfheim_benchmark_v61_finaltrack.py --cam0 /tmp/native/cam0.mp4 --cam1 /tmp/native/cam1.mp4 --cam2 /tmp/native/cam2.mp4 --truth /tmp/native/truth.csv --geometry-dir output/alfheim_v60/geometry_models --out output/alfheim_v61/final
 
-      - name: Guard benchmark integrity
+      - name: Run V62 final quality-gated tracker
+        env:
+          PYTHONPATH: vision_v1
+          PYTHONUNBUFFERED: '1'
+        run: |
+          python vision_v1/alfheim_benchmark_v62_finaltrack.py --cam0 /tmp/native/cam0.mp4 --cam1 /tmp/native/cam1.mp4 --cam2 /tmp/native/cam2.mp4 --truth /tmp/native/truth.csv --geometry-dir output/alfheim_v60/geometry_models --out output/alfheim_v62/final
+
+      - name: Guard final benchmark integrity
         shell: bash
         run: |
           set -euo pipefail
@@ -114,21 +123,25 @@ jobs:
           from pathlib import Path
           d=json.loads(Path('output/alfheim_v60/comparison.json').read_text())
           z=json.loads(Path('output/alfheim_v61/final/metrics.json').read_text())
+          q=json.loads(Path('output/alfheim_v62/final/metrics.json').read_text())
           assert d['inference_uses_ground_truth'] is False
           assert z['inference_uses_ground_truth'] is False
-          assert z['anonymous_tracking_diagnostics']['tracks_evaluated'] >= 5
-          assert z['framewise_geometry_evaluation']['gt_points'] > 0
-          print('V60/V61 integrity guard passed')
+          assert q['inference_uses_ground_truth'] is False
+          assert q['anonymous_tracking_diagnostics']['tracks_evaluated'] >= 5
+          assert q['framewise_geometry_evaluation']['gt_points'] > 0
+          print('V60/V61/V62 integrity guard passed')
           print('V61 anonymous:', z['anonymous_tracking_diagnostics'])
-          print('V61 framewise:', z['framewise_geometry_evaluation'])
-          print('V61 mapped:', z['calibration_mapped_holdout_evaluation'])
+          print('V62 anonymous:', q['anonymous_tracking_diagnostics'])
+          print('V62 framewise:', q['framewise_geometry_evaluation'])
+          print('V62 mapped:', q['calibration_mapped_holdout_evaluation'])
+          print('V62 rejected:', q['rejected_candidate_diagnostics'])
           PY
 
-      - name: Upload V60/V61 report
+      - name: Upload final V60/V61/V62 report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: centella-alfheim-v60-v61-final
+          name: centella-alfheim-v60-v61-v62-final
           path: output/
           if-no-files-found: ignore
           retention-days: 30
