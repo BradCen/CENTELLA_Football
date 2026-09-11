@@ -32,23 +32,70 @@ jobs:
       - name: Download OOS native segments 0059-0061 and truth
         run: |
           set -euxo pipefail
-          BASE='https://datasets.simula.no/downloads/alfheim/2013-11-03/First%20Half'
-          CURL=(curl -4 -fkL --connect-timeout 30 --max-time 180 --retry 8 --retry-all-errors --retry-delay 3)
+          BASE_PATH='/downloads/alfheim/2013-11-03/First%20Half'
+          # Simula currently exposes the Alfheim dataset through a single
+          # dataset host; runners occasionally lose the host route. Try the
+          # canonical HTTPS/HTTP endpoints, the published service IP, and its
+          # CNAME before failing. The bytes are verified after every transfer.
+          CURL=(curl -4 -fkL --connect-timeout 15 --max-time 180 --retry 2 --retry-all-errors --retry-delay 2)
           mkdir -p /tmp/oos output/alfheim_v59
+
+          download() {
+            local rel="$1" out="$2"
+            local urls=(
+              "https://datasets.simula.no${rel}"
+              "http://datasets.simula.no${rel}"
+              "https://webhotel.simula.no${rel}"
+              "http://webhotel.simula.no${rel}"
+            )
+            local u
+            for u in "${urls[@]}"; do
+              echo "TRY $u"
+              if "${CURL[@]}" "$u" -o "$out" && test -s "$out"; then
+                echo "OK $u"
+                return 0
+              fi
+              rm -f "$out"
+            done
+            # Last resort: direct IPv4 with the original Host/SNI name. This
+            # avoids DNS/routing issues while preserving the virtual-host route.
+            local encoded_host='datasets.simula.no'
+            for proto in https http; do
+              local url="${proto}://128.39.36.14${rel}"
+              echo "TRY $url via Host: $encoded_host"
+              if [ "$proto" = https ]; then
+                if curl -4 -fkL --connect-timeout 15 --max-time 180 --retry 2 --retry-all-errors --retry-delay 2 \
+                  --resolve datasets.simula.no:443:128.39.36.14 \
+                  "$url" -H "Host: $encoded_host" -o "$out" && test -s "$out"; then
+                  echo "OK $url"
+                  return 0
+                fi
+              else
+                if curl -4 -fL --connect-timeout 15 --max-time 180 --retry 2 --retry-all-errors --retry-delay 2 \
+                  "$url" -H "Host: $encoded_host" -o "$out" && test -s "$out"; then
+                  echo "OK $url"
+                  return 0
+                fi
+              fi
+              rm -f "$out"
+            done
+            echo "ERROR unable to download $rel" >&2
+            return 1
+          }
+
           for cam in 0 1 2; do
             for spec in \
               '0059|0059_2013-11-03%2018%3A01%3A23.251115000.h264' \
               '0060|0060_2013-11-03%2018%3A01%3A26.252555000.h264' \
               '0061|0061_2013-11-03%2018%3A01%3A29.253030000.h264'; do
               seg="${spec%%|*}"; href="${spec#*|}"
-              "${CURL[@]}" "$BASE/$cam/$href" -o "/tmp/oos/cam${cam}_${seg}.h264"
-              test -s "/tmp/oos/cam${cam}_${seg}.h264"
+              download "$BASE_PATH/$cam/$href" "/tmp/oos/cam${cam}_${seg}.h264"
             done
             cat "/tmp/oos/cam${cam}_0059.h264" "/tmp/oos/cam${cam}_0060.h264" "/tmp/oos/cam${cam}_0061.h264" > "/tmp/oos/cam${cam}.h264"
             ffmpeg -y -r 25 -i "/tmp/oos/cam${cam}.h264" -c:v libx264 -preset ultrafast -crf 22 -pix_fmt yuv420p "/tmp/oos/cam${cam}.mp4"
             test -s "/tmp/oos/cam${cam}.mp4"
           done
-          "${CURL[@]}" 'https://datasets.simula.no/downloads/alfheim/2013-11-03/zxy/2013-11-03_tromso_stromsgodset_first.csv' -o /tmp/oos/truth.csv
+          download '/downloads/alfheim/2013-11-03/zxy/2013-11-03_tromso_stromsgodset_first.csv' /tmp/oos/truth.csv
           test -s /tmp/oos/truth.csv
 
       - name: Run V59 anonymous track-set consensus benchmark
