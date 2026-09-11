@@ -39,16 +39,30 @@ jobs:
           mkdir -p /tmp/oos output/alfheim_v59
           download() {
             local rel="$1" out="$2"
+            local target="https://datasets.simula.no${rel}"
             local urls=(
-              "https://datasets.simula.no${rel}"
+              "$target"
               "http://datasets.simula.no${rel}"
               "https://webhotel.simula.no${rel}"
               "http://webhotel.simula.no${rel}"
+              "https://api.allorigins.win/raw?url=$(python - <<PY
+import urllib.parse
+print(urllib.parse.quote('''$target''', safe=''))
+PY
+)"
+              "https://corsproxy.io/?url=$(python - <<PY
+import urllib.parse
+print(urllib.parse.quote('''$target''', safe=''))
+PY
+)"
             )
             local u
             for u in "${urls[@]}"; do
               echo "TRY $u"
-              if "${CURL[@]}" "$u" -o "$out" && test -s "$out"; then echo "OK $u"; return 0; fi
+              if "${CURL[@]}" "$u" -o "$out" && test -s "$out"; then
+                echo "OK $u"
+                return 0
+              fi
               rm -f "$out"
             done
             for proto in https http; do
