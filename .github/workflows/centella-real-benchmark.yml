@@ -1,8 +1,8 @@
 name: CENTELLA Real Match Benchmark
 
+# External-video benchmark. Keep it manually triggerable because provider-side
+# availability (especially YouTube) must not block the engineering PR.
 on:
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 
 jobs:
