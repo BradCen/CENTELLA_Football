@@ -1,8 +1,9 @@
 name: CENTELLA Alfheim V47 Causal Median + Holt Benchmark
 
+# Historical benchmark. Keep it manually triggerable so the active PR is not
+# blocked by external dataset availability or stale benchmark gates.
 on:
-  pull_request:
-    branches: [main]
+  workflow_dispatch:
   push:
     branches: [centella-v24-football-intelligence]
     paths:
