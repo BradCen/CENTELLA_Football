@@ -1,7 +1,8 @@
 name: CENTELLA V60 Geometry A/B Benchmark
 
 on:
-  # V60 rerun trigger after the OpenCV HoughLinesP compatibility fix.
+  # V60 calibration benchmark. Uses exact OOS Alfheim segments; inference itself
+  # must remain ground-truth blind.
   push:
     branches: [centella-v24-football-intelligence]
     paths:
@@ -26,7 +27,7 @@ permissions:
 jobs:
   v60-geometry-ab:
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -101,6 +102,7 @@ jobs:
       - name: Run V60 image-only geometry A/B
         env:
           PYTHONPATH: vision_v1
+          PYTHONUNBUFFERED: '1'
         run: |
           python vision_v1/alfheim_benchmark_v60_geometry_ab.py \
             --cam0 /tmp/native/cam0.mp4 \
@@ -128,10 +130,11 @@ jobs:
           PY
 
       - name: Upload V60 report
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: centella-alfheim-v60-geometry-ab
           path: output/alfheim_v60/
-          if-no-files-found: error
+          if-no-files-found: ignore
           retention-days: 30
           compression-level: 6
