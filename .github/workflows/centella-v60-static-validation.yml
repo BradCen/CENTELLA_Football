@@ -1,0 +1,69 @@
+name: CENTELLA V60 Static Validation
+
+on:
+  push:
+    branches: [centella-v24-football-intelligence]
+    paths:
+      - 'vision_v1/alfheim_benchmark_v56_oos_globaltrack.py'
+      - 'vision_v1/alfheim_benchmark_v59_oos_trackset_consensus.py'
+      - 'vision_v1/alfheim_geometry_audit.py'
+      - 'vision_v1/alfheim_geometry_refine.py'
+      - 'vision_v1/run_alfheim_v59_local.py'
+      - '.github/workflows/centella-v60-static-validation.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'vision_v1/alfheim_benchmark_v56_oos_globaltrack.py'
+      - 'vision_v1/alfheim_benchmark_v59_oos_trackset_consensus.py'
+      - 'vision_v1/alfheim_geometry_audit.py'
+      - 'vision_v1/alfheim_geometry_refine.py'
+      - 'vision_v1/run_alfheim_v59_local.py'
+      - '.github/workflows/centella-v60-static-validation.yml'
+  workflow_dispatch:
+
+jobs:
+  syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Compile V56/V59/V60 Python modules
+        run: |
+          set -euo pipefail
+          python -m py_compile \
+            vision_v1/alfheim_benchmark_v56_oos_globaltrack.py \
+            vision_v1/alfheim_benchmark_v59_oos_trackset_consensus.py \
+            vision_v1/alfheim_geometry_audit.py \
+            vision_v1/alfheim_geometry_refine.py \
+            vision_v1/run_alfheim_v59_local.py
+      - name: Verify geometry-only modules import no truth API
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import ast
+          from pathlib import Path
+
+          paths = [
+              Path('vision_v1/alfheim_geometry_audit.py'),
+              Path('vision_v1/alfheim_geometry_refine.py'),
+          ]
+          forbidden_names = {
+              'truth_at', 'load_truth', 'truth_oos', 'TARGET_IDS',
+          }
+          forbidden_modules = {'alfheim_benchmark', 'alfheim_benchmark_v56_oos_globaltrack'}
+          for path in paths:
+              tree = ast.parse(path.read_text(), filename=str(path))
+              for node in ast.walk(tree):
+                  if isinstance(node, ast.Import):
+                      for alias in node.names:
+                          assert alias.name not in forbidden_modules, f'{path}: forbidden import {alias.name}'
+                  elif isinstance(node, ast.ImportFrom):
+                      assert node.module not in forbidden_modules, f'{path}: forbidden import {node.module}'
+                      for alias in node.names:
+                          assert alias.name not in forbidden_names, f'{path}: forbidden name {alias.name}'
+                  elif isinstance(node, ast.Name):
+                      assert node.id not in forbidden_names, f'{path}: forbidden name {node.id}'
+          print('geometry-only validation passed')
+          PY

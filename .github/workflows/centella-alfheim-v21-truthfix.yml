@@ -1,0 +1,143 @@
+name: CENTELLA Alfheim V47 Causal Median + Holt Benchmark
+
+# Historical benchmark. Keep it manually triggerable so the active PR is not
+# blocked by external dataset availability or stale benchmark gates.
+on:
+  workflow_dispatch:
+  push:
+    branches: [centella-v24-football-intelligence]
+    paths:
+      - 'vision_v1/alfheim_benchmark_v47.py'
+      - 'vision_v1/alfheim_benchmark_v41.py'
+      - 'vision_v1/alfheim_benchmark_v37.py'
+      - 'vision_v1/alfheim_benchmark_v26.py'
+      - 'vision_v1/alfheim_benchmark_v19.py'
+      - 'vision_v1/alfheim_benchmark_v49_oos.py'
+      - 'vision_v1/alfheim_identity_diagnostic_v1.py'
+      - '.github/workflows/centella-alfheim-v21-truthfix.yml'
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - name: Install CPU runtime
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+          python -m pip install --upgrade pip
+          pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+          pip install ultralytics scipy pandas opencv-python-headless
+      - name: Download native cameras and truth
+        run: |
+          set -euxo pipefail
+          BASE='https://datasets.simula.no/downloads/alfheim/2013-11-03/First%20Half'
+          CURL=(curl -4 -fkL --connect-timeout 30 --max-time 180 --retry 8 --retry-all-errors --retry-delay 3)
+          mkdir -p /tmp/native output/alfheim_v47
+          for cam in 0 1 2; do
+            mkdir -p "/tmp/native/$cam"
+            "${CURL[@]}" "$BASE/$cam/0056_2013-11-03%2018%3A01%3A14.248366000.h264" -o "/tmp/native/$cam/0056.h264"
+            "${CURL[@]}" "$BASE/$cam/0057_2013-11-03%2018%3A01%3A17.249311000.h264" -o "/tmp/native/$cam/0057.h264"
+            "${CURL[@]}" "$BASE/$cam/0058_2013-11-03%2018%3A01%3A20.250403000.h264" -o "/tmp/native/$cam/0058.h264"
+            test -s "/tmp/native/$cam/0056.h264"; test -s "/tmp/native/$cam/0057.h264"; test -s "/tmp/native/$cam/0058.h264"
+            cat "/tmp/native/$cam"/*.h264 > "/tmp/native/cam${cam}.h264"
+            ffmpeg -y -r 25 -i "/tmp/native/cam${cam}.h264" -c:v libx264 -preset ultrafast -crf 22 -pix_fmt yuv420p "/tmp/native/cam${cam}.mp4"
+            test -s "/tmp/native/cam${cam}.mp4"
+          done
+          "${CURL[@]}" 'https://datasets.simula.no/downloads/alfheim/2013-11-03/zxy/2013-11-03_tromso_stromsgodset_first.csv' -o /tmp/native/truth.csv
+          test -s /tmp/native/truth.csv
+      - name: Run V47 causal median + Holt benchmark
+        run: |
+          set -euo pipefail
+          python vision_v1/alfheim_benchmark_v47.py --cam0 /tmp/native/cam0.mp4 --cam1 /tmp/native/cam1.mp4 --cam2 /tmp/native/cam2.mp4 --truth /tmp/native/truth.csv --out output/alfheim_v47 --sample-fps 8.0 --calibration-seconds 4.0 --imgsz 1280 --model yolo11n.pt 2>&1 | tee output/alfheim_v47/run.log
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          m=json.loads(Path('output/alfheim_v47/metrics.json').read_text())
+          print(json.dumps(m,indent=2))
+          assert m.get('version') == 'v47-causal-median-plus-holt', m.get('version')
+          assert m['matched'] == 504, m['matched']
+          assert m['recall'] >= 0.90, m['recall']
+          assert m['position_mae_m'] < 6.968596667699693, m['position_mae_m']
+          PY
+      - name: Diagnose holdout identity switches
+        if: always()
+        run: |
+          set -euo pipefail
+          python vision_v1/alfheim_identity_diagnostic_v1.py --rows output/alfheim_v47/matched_observations.csv --truth /tmp/native/truth.csv --out output/alfheim_v47
+          cat output/alfheim_v47/identity_diagnostic.json
+      - name: Upload benchmark artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: centella-alfheim-v47-causal-median-holt
+          path: output/alfheim_v47/
+          retention-days: 14
+
+  v49_oos:
+    name: V49 OOS 0059-0061
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install CPU runtime
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+          python -m pip install --upgrade pip
+          pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+          pip install ultralytics scipy pandas opencv-python-headless
+      - name: Download OOS native segments 0059-0061 and truth
+        run: |
+          set -euxo pipefail
+          BASE='https://datasets.simula.no/downloads/alfheim/2013-11-03/First%20Half'
+          CURL=(curl -4 -fkL --connect-timeout 30 --max-time 180 --retry 8 --retry-all-errors --retry-delay 3)
+          mkdir -p /tmp/oos output/alfheim_v49
+          for cam in 0 1 2; do
+            mkdir -p "/tmp/oos/$cam"
+            for spec in \
+              '0059|0059_2013-11-03%2018%3A01%3A23.251115000.h264' \
+              '0060|0060_2013-11-03%2018%3A01%3A26.252555000.h264' \
+              '0061|0061_2013-11-03%2018%3A01%3A29.253030000.h264'; do
+              seg="${spec%%|*}"
+              href="${spec#*|}"
+              echo "cam=$cam seg=$seg href=$href"
+              "${CURL[@]}" "$BASE/$cam/$href" -o "/tmp/oos/$cam/${seg}.h264"
+              test -s "/tmp/oos/$cam/${seg}.h264"
+            done
+            cat "/tmp/oos/$cam/0059.h264" "/tmp/oos/$cam/0060.h264" "/tmp/oos/$cam/0061.h264" > "/tmp/oos/cam${cam}.h264"
+            ffmpeg -y -r 25 -i "/tmp/oos/cam${cam}.h264" -c:v libx264 -preset ultrafast -crf 22 -pix_fmt yuv420p "/tmp/oos/cam${cam}.mp4"
+            test -s "/tmp/oos/cam${cam}.mp4"
+          done
+          "${CURL[@]}" 'https://datasets.simula.no/downloads/alfheim/2013-11-03/zxy/2013-11-03_tromso_stromsgodset_first.csv' -o /tmp/oos/truth.csv
+          test -s /tmp/oos/truth.csv
+      - name: Run V49 unchanged V47 policy on OOS segment
+        run: |
+          set -euo pipefail
+          python vision_v1/alfheim_benchmark_v49_oos.py --cam0 /tmp/oos/cam0.mp4 --cam1 /tmp/oos/cam1.mp4 --cam2 /tmp/oos/cam2.mp4 --truth /tmp/oos/truth.csv --out output/alfheim_v49 --sample-fps 8.0 --calibration-seconds 3.0 --imgsz 1280 --model yolo11n.pt 2>&1 | tee output/alfheim_v49/run.log
+          cat output/alfheim_v49/metrics.json
+      - name: Diagnose OOS identity switches
+        if: always()
+        run: |
+          set -euo pipefail
+          if test -s output/alfheim_v49/matched_observations.csv; then
+            python vision_v1/alfheim_identity_diagnostic_v1.py --rows output/alfheim_v49/matched_observations.csv --truth /tmp/oos/truth.csv --out output/alfheim_v49 --truth-offset-s 10.456822
+            cat output/alfheim_v49/identity_diagnostic.json
+          fi
+      - name: Upload OOS artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: centella-alfheim-v49-oos-0059-0061
+          path: output/alfheim_v49/
+          retention-days: 14

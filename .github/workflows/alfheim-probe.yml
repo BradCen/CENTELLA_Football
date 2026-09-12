@@ -1,0 +1,72 @@
+name: Alfheim Ground Truth Probe
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install ffmpeg
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+
+      - name: Download fixed full-pitch video + 20 Hz sensor truth
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p /tmp/alfheim/segments /tmp/alfheim/out
+          BASE='https://datasets.simula.no/downloads/alfheim/2013-11-03/First%20Half/panorama'
+          CURL='curl -fkL --connect-timeout 20 --retry 4 --retry-all-errors --retry-delay 2'
+          $CURL "$BASE/0035_2013-11-03%2018%3A01%3A12.794293000.h264" -o /tmp/alfheim/segments/0035.h264
+          $CURL "$BASE/0036_2013-11-03%2018%3A01%3A15.793287000.h264" -o /tmp/alfheim/segments/0036.h264
+          $CURL "$BASE/0037_2013-11-03%2018%3A01%3A18.793282000.h264" -o /tmp/alfheim/segments/0037.h264
+          $CURL "$BASE/0038_2013-11-03%2018%3A01%3A21.793325000.h264" -o /tmp/alfheim/segments/0038.h264
+          test -s /tmp/alfheim/segments/0035.h264
+          test -s /tmp/alfheim/segments/0036.h264
+          test -s /tmp/alfheim/segments/0037.h264
+          test -s /tmp/alfheim/segments/0038.h264
+          cat /tmp/alfheim/segments/*.h264 > /tmp/alfheim/out/panorama.h264
+          ffmpeg -y -framerate 25 -i /tmp/alfheim/out/panorama.h264 -c:v libx264 -preset veryfast -crf 23 /tmp/alfheim/out/panorama.mp4
+          $CURL 'https://datasets.simula.no/downloads/alfheim/2013-11-03/zxy/2013-11-03_tromso_stromsgodset_first.csv' -o /tmp/alfheim/out/truth.csv
+          test -s /tmp/alfheim/out/truth.csv
+          ffmpeg -y -ss 4 -i /tmp/alfheim/out/panorama.mp4 -frames:v 1 /tmp/alfheim/out/frame.jpg
+          ls -lh /tmp/alfheim/out/*
+          head -n 5 /tmp/alfheim/out/truth.csv
+
+      - name: Validate sensor schema and time overlap
+        shell: bash
+        run: |
+          python - <<'PY'
+          import csv, json
+          from pathlib import Path
+          p=Path('/tmp/alfheim/out/truth.csv')
+          rows=[]
+          with p.open(newline='', encoding='utf-8', errors='replace') as f:
+              r=csv.reader(f)
+              for row in r:
+                  if len(row)>=9:
+                      rows.append(row)
+                  if len(rows)>=50000: break
+          assert rows, 'No sensor rows'
+          print('first_sensor_row=', rows[0])
+          target=[row for row in rows if '2013-11-03 18:01:12' <= row[0] <= '2013-11-03 18:01:25.999999']
+          assert target, 'No truth rows overlap downloaded video time window'
+          ids=sorted({x[1] for x in target})
+          print('overlap_rows=', len(target), 'ids=', ids)
+          Path('/tmp/alfheim/out/probe.json').write_text(json.dumps({'video_start':'2013-11-03 18:01:12.794293','overlap_rows':len(target),'sensor_ids':ids},indent=2))
+          PY
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: alfheim-ground-truth-probe
+          path: /tmp/alfheim/out/
+          if-no-files-found: ignore
+          retention-days: 7
