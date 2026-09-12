@@ -11,6 +11,7 @@ from .extended import advanced_intelligence, ball_progression, ball_side_pressin
 from .goalkeeping import GoalkeeperAnalytics
 from .performance_intelligence import performance_intelligence
 from .pitch_control import PitchControlConfig, pitch_control
+from .player_advanced import contribution_profile, player_evolution, player_similarity
 from .player_intelligence import player_intelligence
 from .player_profile import player_passport, role_suitability
 from .platform import FootballIntelligencePlatform
@@ -35,8 +36,9 @@ __all__ = [
     "ShotFeatures", "LogisticXGModel", "fit_xg", "save_xg_model", "load_xg_model",
     "GoalkeeperAnalytics", "WorkloadProfile", "compute_workload", "QualityThresholds", "tracking_quality",
     "load_tracking_csv", "load_events_json", "frames_from_native_outputs",
-    "player_passport", "role_suitability", "player_intelligence", "tactical_intelligence", "performance_intelligence",
-    "coach_intelligence", "summarize_report", "to_markdown", "build_match_report",
+    "player_passport", "role_suitability", "player_intelligence", "player_evolution", "player_similarity", "contribution_profile",
+    "tactical_intelligence", "performance_intelligence", "coach_intelligence",
+    "summarize_report", "to_markdown", "build_match_report",
 ]
 
-__version__ = "31.0.0"
+__version__ = "32.0.0"
