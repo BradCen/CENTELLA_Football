@@ -7,6 +7,7 @@ from .engine import AnalyticsEngine
 from .event_inference import EventInferenceConfig, infer_events, infer_passes, infer_possession, infer_shots
 from .events import DuelEvent, EventTimeline, PassEvent, SetPieceEvent, ShotEvent
 from .expected import LogisticXGModel, ShotFeatures, fit_xg
+from .extended import advanced_intelligence, ball_progression, ball_side_pressing, defensive_line, numerical_superiority, rest_defence, territorial_value, zone_occupation
 from .goalkeeping import GoalkeeperAnalytics
 from .performance_intelligence import performance_intelligence
 from .pitch_control import PitchControlConfig, pitch_control
@@ -27,6 +28,7 @@ __all__ = [
     "PassEvent", "ShotEvent", "DuelEvent", "SetPieceEvent", "EventTimeline",
     "block_metrics", "aggregate_block_metrics", "pass_network", "post_loss_pressure",
     "PitchControlConfig", "pitch_control", "field_tilt", "progression_rate", "transition_metrics",
+    "advanced_intelligence", "zone_occupation", "territorial_value", "ball_progression", "numerical_superiority", "rest_defence", "defensive_line", "ball_side_pressing",
     "infer_possession_changes", "possession_summary",
     "EventInferenceConfig", "infer_events", "infer_passes", "infer_possession", "infer_shots",
     "ShotFeatures", "LogisticXGModel", "fit_xg", "save_xg_model", "load_xg_model",
@@ -36,4 +38,4 @@ __all__ = [
     "coach_intelligence",
 ]
 
-__version__ = "30.0.0"
+__version__ = "31.0.0"
