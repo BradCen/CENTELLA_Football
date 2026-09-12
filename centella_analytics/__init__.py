@@ -16,6 +16,7 @@ from .player_profile import player_passport, role_suitability
 from .platform import FootballIntelligencePlatform
 from .possession import infer_possession_changes, possession_summary
 from .quality import QualityThresholds, tracking_quality
+from .reporting import build_match_report, summarize_report, to_markdown
 from .serialization import load_xg_model, save_xg_model
 from .tactical import aggregate_block_metrics, block_metrics, pass_network, post_loss_pressure
 from .tactical_intelligence import tactical_intelligence
@@ -35,7 +36,7 @@ __all__ = [
     "GoalkeeperAnalytics", "WorkloadProfile", "compute_workload", "QualityThresholds", "tracking_quality",
     "load_tracking_csv", "load_events_json", "frames_from_native_outputs",
     "player_passport", "role_suitability", "player_intelligence", "tactical_intelligence", "performance_intelligence",
-    "coach_intelligence",
+    "coach_intelligence", "summarize_report", "to_markdown", "build_match_report",
 ]
 
 __version__ = "31.0.0"
