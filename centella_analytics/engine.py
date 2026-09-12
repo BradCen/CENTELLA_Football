@@ -7,6 +7,7 @@ from .advanced import field_tilt, progression_rate, transition_metrics
 from .event_inference import EventInferenceConfig, infer_events
 from .events import EventTimeline
 from .events_analytics import duel_summary, expected_assists, set_piece_summary, xg_summary
+from .extended import advanced_intelligence
 from .goalkeeping import goalkeeper_positioning
 from .pitch_control import PitchControlConfig, pitch_control
 from .player_intelligence import player_intelligence
@@ -19,7 +20,7 @@ from .types import TrackingFrame
 
 @dataclass(slots=True)
 class AnalyticsEngine:
-    """Orchestrate the V24-V28 analytical layers without coupling them to a detector."""
+    """Orchestrate the V24-V31 analytical layers without coupling them to a detector."""
 
     pitch_length_m: float = 105.0
     pitch_width_m: float = 68.0
@@ -29,7 +30,7 @@ class AnalyticsEngine:
         opponent = opponent or ("away" if team == "home" else "home")
         latest = frames[-1] if frames else None
         report = {
-            "version": "28.0.0",
+            "version": "31.0.0",
             "team": team,
             "tracking": {"frames": len(frames), "first_t": float(frames[0].t) if frames else None, "last_t": float(frames[-1].t) if frames else None},
             "data_quality": tracking_quality(frames),
@@ -57,13 +58,17 @@ class AnalyticsEngine:
                 pitch_width_m=self.pitch_width_m,
             ),
             "performance_intelligence": performance_intelligence(frames, team=team),
+            "advanced_intelligence": advanced_intelligence(
+                frames, events, team=team, opponent=opponent,
+                pitch_length_m=self.pitch_length_m, pitch_width_m=self.pitch_width_m,
+            ),
         }
         if latest:
             report["pitch_control"] = pitch_control(latest.players, team, self.control_config)
         return report
 
     def analyze_tracking(self, frames: Sequence[TrackingFrame], team: str, opponent: str | None = None, config: EventInferenceConfig | None = None) -> dict:
-        """Run V24-V28 from tracking alone using conservative candidate-event inference."""
+        """Run V24-V31 from tracking alone using conservative candidate-event inference."""
         events = infer_events(frames, config)
         report = self.analyze_team(frames, events, team, opponent)
         report["event_inference"] = {
