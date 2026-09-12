@@ -3,6 +3,7 @@
 from .adapter import frames_from_native_outputs, load_events_json, load_tracking_csv
 from .advanced import field_tilt, progression_rate, transition_metrics
 from .coach_intelligence import coach_intelligence
+from .contracts import CAPABILITY_MANIFEST, ContractIssue, assert_valid_events, assert_valid_tracking, validate_analysis_output, validate_events, validate_tracking
 from .engine import AnalyticsEngine
 from .event_inference import EventInferenceConfig, infer_events, infer_passes, infer_possession, infer_shots
 from .events import DuelEvent, EventTimeline, PassEvent, SetPieceEvent, ShotEvent
@@ -39,6 +40,7 @@ __all__ = [
     "player_passport", "role_suitability", "player_intelligence", "player_evolution", "player_similarity", "contribution_profile",
     "tactical_intelligence", "performance_intelligence", "coach_intelligence",
     "summarize_report", "to_markdown", "build_match_report",
+    "ContractIssue", "CAPABILITY_MANIFEST", "validate_tracking", "validate_events", "validate_analysis_output", "assert_valid_tracking", "assert_valid_events",
 ]
 
 __version__ = "32.0.0"
