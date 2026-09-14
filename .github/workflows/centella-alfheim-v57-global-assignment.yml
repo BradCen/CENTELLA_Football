@@ -1,0 +1,35 @@
+name: CENTELLA Alfheim V57 Global Anonymous Assignment
+
+on:
+  push:
+    branches: [centella-v24-football-intelligence]
+    paths:
+      - 'vision_v1/alfheim_v57_global_assignment.py'
+      - 'vision_v1/README_V56_PROTOCOL.md'
+      - '.github/workflows/centella-alfheim-v57-global-assignment.yml'
+  workflow_dispatch:
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Run syntax and invariant checks
+        run: |
+          python -m py_compile vision_v1/alfheim_v57_global_assignment.py
+          python - <<'PY'
+          from vision_v1.alfheim_v57_global_assignment import Detection, build_tracks
+          frames=[
+              (0.0,[Detection(0,10,10),Detection(0,20,10)]),
+              (0.125,[Detection(.125,10.5,10),Detection(.125,19.5,10)]),
+              (0.25,[Detection(.25,11,10),Detection(.25,19,10)]),
+              (0.375,[Detection(.375,11.5,10),Detection(.375,18.5,10)]),
+          ]
+          tracks=build_tracks(frames)
+          assert len(tracks)==2, tracks
+          assert all(len(t.points)==4 for t in tracks), [len(t.points) for t in tracks]
+          print('V57 tracker invariants: PASS')
+          PY

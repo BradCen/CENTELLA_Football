@@ -1,0 +1,1 @@
+Official OOS contract: cameras 0,1,2; native H.264 segments 0059, 0060, 0061; official first-half ZXY CSV. Never use reduced community MP4s for official benchmark claims.

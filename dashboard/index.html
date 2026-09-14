@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CENTELLA Football Intelligence</title>
+<style>
+:root{font-family:Inter,system-ui,-apple-system,Segoe UI,sans-serif;background:#0b0d10;color:#e8edf4}*{box-sizing:border-box}body{margin:0;background:linear-gradient(160deg,#0b0d10,#11151c);min-height:100vh}.wrap{max-width:1280px;margin:auto;padding:28px}.top{display:flex;justify-content:space-between;gap:18px;align-items:end;flex-wrap:wrap}.title{font-size:32px;font-weight:750}.muted{color:#91a0b4}.toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.btn,label{border:1px solid #283241;background:#141a22;color:#dbe4ef;border-radius:10px;padding:9px 12px;cursor:pointer}.btn:hover,label:hover{background:#1a222d}.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-top:22px}.card{background:#11161e;border:1px solid #222b37;border-radius:16px;padding:18px;box-shadow:0 8px 30px #0004}.kpi{font-size:28px;font-weight:700;margin-top:8px}.section{margin-top:20px}.section h2{font-size:20px;margin:0 0 10px}.two{display:grid;grid-template-columns:1.2fr .8fr;gap:14px}.table{width:100%;border-collapse:collapse}.table th,.table td{text-align:left;padding:9px;border-bottom:1px solid #202938}.table th{color:#95a5ba;font-size:12px;text-transform:uppercase;letter-spacing:.06em}.pill{display:inline-block;padding:4px 8px;border-radius:999px;border:1px solid #2b3746;background:#151c26;font-size:12px}.prompt{padding:12px 0;border-bottom:1px solid #202938}.prompt:last-child{border-bottom:0}.empty{padding:28px;text-align:center;border:1px dashed #2b3746;border-radius:14px;color:#8290a3}.footer{margin-top:24px;color:#6f7e92;font-size:12px}input[type=file]{display:none}@media(max-width:900px){.grid{grid-template-columns:repeat(2,1fr)}.two{grid-template-columns:1fr}}@media(max-width:560px){.grid{grid-template-columns:1fr}.wrap{padding:16px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <div><div class="title">CENTELLA Football Intelligence</div><div id="meta" class="muted">Load a CENTELLA report JSON to begin.</div></div>
+    <div class="toolbar"><label>Load report<input id="file" type="file" accept="application/json,.json"></label><button class="btn" id="demo">Load demo schema</button></div>
+  </div>
+  <div id="app" class="section"><div class="empty">Drop a generated <b>report.json</b> here or use “Load report”.</div></div>
+  <div class="footer">Observational/model outputs are estimates unless explicitly validated. Candidate events are not ground truth.</div>
+</div>
+<script>
+const demo={team:'home',version:'32.0.0',tracking:{frames:0,first_t:null,last_t:null},predictive:{xg:{shots:null,xg:null,goals:null}},tactical:{field_tilt:{field_tilt_pct:null},progression:{progressed_m:null}},pitch_control:{team_control_pct:null},player_intelligence:{players:{}},coach_intelligence:{insights:[]},event_inference:{mode:'supplied_or_candidate',validated_ground_truth:false}};
+const q=(o,...ks)=>ks.reduce((a,k)=>a&&a[k]!=null?a[k]:null,o); const fmt=v=>v==null?'—':(typeof v==='number'?v.toFixed(2):v);
+function render(src){const d=src.analysis||src, players=q(d,'player_intelligence','players')||{}, perf=q(d,'performance_intelligence','players')||{}, h=q(d,'predictive','xg')||{}, tact=d.tactical||{}, adv=d.advanced_intelligence||{}, insights=q(src,'coach_intelligence','insights')||[];
+ document.getElementById('meta').textContent=`Team: ${d.team||'—'} · version ${d.version||'—'} · ${q(d,'tracking','frames')||0} frames`;
+ const rows=Object.entries(players).map(([id,p])=>({id,pass:(q(p,'technical_per_90','pass_completion_rate')??0)*100,prog:q(p,'technical_per_90','progressive_pass_distance_m'),key:q(p,'technical_per_90','key_passes'),speed:q(p,'physical','max_speed_mps'),conf:q(p,'observation','mean_confidence')}));
+ rows.sort((a,b)=>(b.prog||0)-(a.prog||0));
+ const leader=rows.slice(0,5);
+ document.getElementById('app').innerHTML=`
+ <div class="grid">
+  ${[['Shots',h.shots],['xG',h.xg],['Goals',h.goals],['Field tilt',tact.field_tilt?.field_tilt_pct==null?null:`${fmt(tact.field_tilt.field_tilt_pct)}%`],['Progressive metres',tact.progression?.progressed_m],['Pitch control',d.pitch_control?.team_control_pct==null?null:`${fmt(d.pitch_control.team_control_pct)}%`],['Local numerical advantage',adv.numerical_superiority?.team_advantage_rate==null?null:`${fmt(100*adv.numerical_superiority.team_advantage_rate)}%`],['Territorial value',adv.territorial_value?.mean_territorial_value]].map(([k,v])=>`<div class="card"><div class="muted">${k}</div><div class="kpi">${fmt(v)}</div></div>`).join('')}
+ </div>
+ <div class="two section">
+  <div class="card"><h2>Player leaders</h2>${leader.length?`<table class="table"><thead><tr><th>Player</th><th>Pass %</th><th>Progressive m/90</th><th>Key passes/90</th><th>Max speed</th><th>Confidence</th></tr></thead><tbody>${leader.map(r=>`<tr><td>${r.id}</td><td>${fmt(r.pass)}%</td><td>${fmt(r.prog)}</td><td>${fmt(r.key)}</td><td>${fmt(r.speed)}</td><td>${fmt(r.conf)}</td></tr>`).join('')}</tbody></table>`:'<div class="empty">No player observations in this report.</div>'}</div>
+  <div class="card"><h2>Coach review</h2>${insights.length?insights.slice(0,8).map(x=>`<div class="prompt"><span class="pill">${x.priority||'review'}</span><div style="margin-top:7px">${x.message||''}</div><div class="muted" style="margin-top:5px">Confidence: ${fmt(x.confidence)}</div></div>`).join(''):'<div class="empty">No review prompts emitted.</div>'}</div>
+ </div>
+ <div class="section card"><h2>Provenance</h2><div class="muted">Event mode: ${q(d,'event_inference','mode')||q(src,'provenance','event_inference_mode')||'—'} · validated ground truth: ${q(d,'event_inference','validated_ground_truth')??q(src,'provenance','validated_ground_truth')??false}</div></div>`;
+}
+document.getElementById('file').addEventListener('change',e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{render(JSON.parse(r.result))}catch(err){document.getElementById('app').innerHTML='<div class="empty">Invalid JSON report.</div>'}};r.readAsText(f)});
+document.getElementById('demo').addEventListener('click',()=>render(demo));
+</script>
+</body></html>
