@@ -30,10 +30,9 @@ def player_evolution(frames: Sequence[TrackingFrame], player_id: str, events=(),
 
 
 def player_similarity(passports: dict[str, dict], player_id: str | None = None, top_k: int = 5) -> dict:
-    """Compare player passports using normalized observed physical/technical features."""
+    """Compare player passports across the current and legacy passport schemas."""
     if len(passports) < 2:
         return {"valid": False, "reason": "need_at_least_two_passports"}
-    # Keep this feature contract aligned with player_intelligence/player_profile.
     features = (
         ("physical", "mean_speed_mps"),
         ("physical", "max_speed_mps"),
@@ -51,9 +50,16 @@ def player_similarity(passports: dict[str, dict], player_id: str | None = None, 
         value = passport
         for part in section.split("."):
             value = value.get(part, {}) if isinstance(value, dict) else {}
-        raw = value.get(key, 0.0) if isinstance(value, dict) else 0.0
+        raw = value.get(key) if isinstance(value, dict) else None
+        # player_passport (legacy/public schema) used flat coverage spans and a
+        # technical_event_rates_per_90 section. Accept both contracts so a passport
+        # produced by either supported entry point remains comparable.
+        if raw is None and section == "physical.position_span":
+            raw = passport.get("physical", {}).get(f"coverage_span_{key}_m", 0.0)
+        if raw is None and section == "technical_per_90":
+            raw = passport.get("technical_event_rates_per_90", {}).get(key, 0.0)
         try:
-            return float(raw)
+            return float(raw if raw is not None else 0.0)
         except (TypeError, ValueError):
             return 0.0
 
