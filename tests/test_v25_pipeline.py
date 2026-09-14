@@ -1,3 +1,5 @@
+import pytest
+
 from centella_analytics.v25 import VisionIntelligencePipeline
 
 
@@ -12,8 +14,6 @@ def test_native_output_bridge_keeps_players_and_pipeline_contract():
     assert frames[0].players[0].player_id == "7"
 
 
-def test_empty_native_analysis_reports_no_fabricated_events():
-    report = VisionIntelligencePipeline().analyze_native_outputs([], "home")
-    assert report["tracking"]["frames"] == 0
-    assert report["event_inference"]["validated_ground_truth"] is False
-    assert report["event_inference"]["passes"] == 0
+def test_empty_native_analysis_is_rejected_by_tracking_contract():
+    with pytest.raises(ValueError, match="No tracking frames were supplied"):
+        VisionIntelligencePipeline().analyze_native_outputs([], "home")
