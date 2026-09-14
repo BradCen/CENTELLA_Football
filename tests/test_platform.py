@@ -8,8 +8,9 @@ def test_platform_preserves_provenance_and_final_layers():
         TrackingFrame(1.0, [PlayerSample("7", "home", 21.0, 30.0, 1.0), PlayerSample("9", "away", 69.0, 40.0, 1.0)]),
     ]
     report = FootballIntelligencePlatform().analyze_tracking(frames, team="home")
-    assert report["platform"]["version"] == "30.0.0"
+    assert report["platform"]["version"] == "32.0.0"
     assert report["provenance"]["tracking_frames"] == 2
     assert report["provenance"]["validated_ground_truth"] is False
     assert "player_intelligence" in report["analysis"]
     assert "coach_intelligence" in report
+    assert "capability_manifest" in report["provenance"]
