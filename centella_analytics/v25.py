@@ -11,7 +11,7 @@ from .types import TrackingFrame
 
 @dataclass(slots=True)
 class VisionIntelligencePipeline:
-    """Bridge the V21 vision output contract into the V31 intelligence platform."""
+    """Bridge the V21/V62 vision output contract into the V32 intelligence platform."""
 
     platform: FootballIntelligencePlatform = field(default_factory=FootballIntelligencePlatform)
     event_config: EventInferenceConfig = field(default_factory=EventInferenceConfig)
@@ -26,7 +26,7 @@ class VisionIntelligencePipeline:
         result["pipeline"] = {
             "name": "CENTELLA Vision → Football Intelligence",
             "vision_contract": "V21/V62 fused rows",
-            "analytics_version": "31.0.0",
+            "analytics_version": "32.0.0",
             "frames_received": len(frames),
         }
         return result
