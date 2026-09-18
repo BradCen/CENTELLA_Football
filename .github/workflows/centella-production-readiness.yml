@@ -42,20 +42,40 @@ jobs:
           mkdir -p output/production_readiness
           python - <<'PY'
           import json, os, platform, sys
+          physical_cpus = None
+          memory_total_gb = None
           try:
-              import psutil
-              vm = psutil.virtual_memory()
-              mem_total_gb = vm.total / 1024**3
-              physical_cpus = psutil.cpu_count(logical=False)
+              with open("/proc/cpuinfo", encoding="utf-8") as f:
+                  physical_ids = set()
+                  current = {}
+                  for line in f:
+                      line = line.strip()
+                      if not line:
+                          if "physical id" in current and "core id" in current:
+                              physical_ids.add((current["physical id"], current["core id"]))
+                          current = {}
+                          continue
+                      if ":" in line:
+                          k,v = line.split(":",1)
+                          current[k.strip()] = v.strip()
           except Exception:
-              mem_total_gb = None
-              physical_cpus = None
+              physical_ids = set()
+          if physical_ids:
+              physical_cpus = len(physical_ids)
+          try:
+              with open("/proc/meminfo", encoding="utf-8") as f:
+                  for line in f:
+                      if line.startswith("MemTotal:"):
+                          memory_total_gb = int(line.split()[1]) / 1024**2
+                          break
+          except Exception:
+              pass
           d = {
               "platform": platform.platform(),
               "python": sys.version,
               "logical_cpus": os.cpu_count(),
               "physical_cpus": physical_cpus,
-              "memory_total_gb": mem_total_gb,
+              "memory_total_gb": memory_total_gb,
           }
           print(json.dumps(d, indent=2))
           open("output/production_readiness/host.json","w").write(json.dumps(d,indent=2))
@@ -137,9 +157,18 @@ jobs:
           python tools/measure_command.py             --name v62_vision_tracker             --json-out output/production_readiness/v62_vision_tracker.json             -- python vision_v1/alfheim_benchmark_v62_finaltrack.py               --cam0 /tmp/native/cam0.mp4               --cam1 /tmp/native/cam1.mp4               --cam2 /tmp/native/cam2.mp4               --truth /tmp/native/truth.csv               --geometry-dir output/production_readiness/geometry_models               --out output/production_readiness/v62_final
           python - <<'PY'
           import json
-          d=json.load(open("output/production_readiness/v62_vision_tracker.json"))
+          measured="output/production_readiness/v62_vision_tracker.json"
+          v62="output/production_readiness/v62_final/metrics.json"
+          d=json.load(open(measured))
+          v=json.load(open(v62))
+          d["fixture_duration_s"]=v["duration_s"]
+          d["sample_fps"]=v["sample_fps"]
+          d["v62_anonymous_match_rate_le_4m"]=v["anonymous_tracking_diagnostics"].get("nearest_match_rate")
+          json.dump(d, open(measured,"w"), indent=2)
           assert d["returncode"] == 0
           print("V62 measured command completed successfully")
+          print("fixture_duration_s=", d["fixture_duration_s"])
+          print("sample_fps=", d["sample_fps"])
           PY
 
       - name: Build media inventory from native source
