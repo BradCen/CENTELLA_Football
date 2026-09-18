@@ -133,8 +133,17 @@ def expand_to_matchday_roster(frames: list[TrackingFrame], target_players: int) 
             seed = seeds[team][i % len(seeds[team])]
             roster.append((f"{team}_{i+1:02d}", team, seed))
 
+    start_t = frames[0].t
+    normalized_frames = [
+        TrackingFrame(
+            t=frame.t - start_t,
+            players=frame.players,
+            ball=frame.ball,
+        )
+        for frame in frames
+    ]
     expanded: list[TrackingFrame] = []
-    for frame in frames:
+    for frame in normalized_frames:
         players: list[PlayerSample] = []
         for idx, (pid, team, seed) in enumerate(roster):
             template = next((p for p in frame.players if p.player_id == seed.player_id), frame.players[0])
