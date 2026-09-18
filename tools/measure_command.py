@@ -31,4 +31,9 @@ def _children_rusage() -> tuple[float | None, float | None]:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="Measure one external command for production benchmarjÚ[ËB
+    ap = argparse.ArgumentParser(description="Measure one external command for production benchmark]"")
+    ap.add_argument("--name", required=True)
+    ap.add_argument("--json-out", required=True)
+    ap.add_argument("--cwd", default=None)
+    ap.add_argument("command", nargs=argparse.REPEXAR)
+    args = ap.parse_args()
