@@ -1,0 +1,212 @@
+name: CENTELLA Production Readiness / Hardware Benchmark
+
+on:
+  push:
+    branches: [centella-v24-football-intelligence]
+    paths:
+      - 'tools/measure_command.py'
+      - 'tools/production_readiness_benchmark.py'
+      - 'tools/assemble_production_readiness.py'
+      - '.github/workflows/centella-production-readiness.yml'
+      - 'vision_v1/alfheim_benchmark_v62_finaltrack.py'
+      - 'vision_v1/alfheim_benchmark_v56_oos_globaltrack.py'
+      - 'vision_v1/alfheim_geometry_refine.py'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'tools/measure_command.py'
+      - 'tools/production_readiness_benchmark.py'
+      - 'tools/assemble_production_readiness.py'
+      - '.github/workflows/centella-production-readiness.yml'
+      - 'vision_v1/alfheim_benchmark_v62_finaltrack.py'
+      - 'vision_v1/alfheim_benchmark_v56_oos_globaltrack.py'
+      - 'vision_v1/alfheim_geometry_refine.py'
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  production-readiness:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Record benchmark host
+        run: |
+          mkdir -p output/production_readiness
+          python - <<'PY'
+          import json, os, platform, sys
+          try:
+              import psutil
+              vm = psutil.virtual_memory()
+              mem_total_gb = vm.total / 1024**3
+              physical_cpus = psutil.cpu_count(logical=False)
+          except Exception:
+              mem_total_gb = None
+              physical_cpus = None
+          d = {
+              "platform": platform.platform(),
+              "python": sys.version,
+              "logical_cpus": os.cpu_count(),
+              "physical_cpus": physical_cpus,
+              "memory_total_gb": mem_total_gb,
+          }
+          print(json.dumps(d, indent=2))
+          open("output/production_readiness/host.json","w").write(json.dumps(d,indent=2))
+          PY
+
+      - name: Install runtime
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+          python -m pip install --upgrade pip
+          pip install psutil torch torchvision --index-url https://download.pytorch.org/whl/cpu
+          pip install ultralytics scipy pandas opencv-python-headless
+
+      - name: Acquire exact OOS segments 0059-0061
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE_HTTPS='https://datasets.simula.no/downloads/alfheim/2013-11-03/First%20Half'
+          BASE_HTTP='http://home.ifi.uio.no/paalh/dataset/alfheim/2013-11-03/First%20Half'
+          OUT='/tmp/native'
+          mkdir -p "$OUT"
+
+          valid_binary() {
+            local f="$1"
+            test -s "$f" || return 1
+            ! grep -aoiE '<html|<!doctype|access denied|too many requests|rate limit exceeded|not found' "$f" | head -n 1 >/dev/null
+          }
+
+          fetch_first_valid() {
+            local out="$1"; shift
+            local url
+            rm -f "$out"
+            for url in "$@"; do
+              echo "TRY $url"
+              if curl -4 -k -fL --connect-timeout 15 --max-time 180 --retry 3 --retry-all-errors --retry-delay 3 "$url" -o "$out" && valid_binary "$out"; then
+                echo "OK $url"
+                return 0
+              fi
+              rm -f "$out"
+            done
+            echo "FAILED all sources for $out" >&2
+            return 1
+          }
+
+          for cam in 0 1 2; do
+            mkdir -p "$OUT/$cam"
+            for spec in               '0059|0059_2013-11-03%2018%3A01%3A23.251115000.h264'               '0060|0060_2013-11-03%2018%3A01%3A26.252555000.h264'               '0061|0061_2013-11-03%2018%3A01%3A29.253030000.h264'; do
+              seg="${spec%%|*}"
+              href="${spec#*|}"
+              fetch_first_valid "$OUT/$cam/$seg.h264"                 "$BASE_HTTPS/$cam/$href"                 "$BASE_HTTP/$cam/$href"                 "http://datasets.simula.no/downloads/alfheim/2013-11-03/First%20Half/$cam/$href"
+            done
+            cat "$OUT/$cam/0059.h264" "$OUT/$cam/0060.h264" "$OUT/$cam/0061.h264" > "$OUT/cam${cam}.h264"
+            ffmpeg -y -loglevel error -f h264 -r 25 -i "$OUT/cam${cam}.h264"               -c:v libx264 -preset ultrafast -crf 22 -pix_fmt yuv420p "$OUT/cam${cam}.mp4"
+          done
+
+          TRUTH='https://datasets.simula.no/downloads/alfheim/2013-11-03/zxy/2013-11-03_tromso_stromsgodset_first.csv'
+          TRUTH_OLD='http://home.ifi.uio.no/paalh/dataset/alfheim/2013-11-03/zxy/2013-11-03_tromso_stromsgodset_first.csv'
+          TRUTH_HTTP='http://datasets.simula.no/downloads/alfheim/2013-11-03/zxy/2013-11-03_tromso_stromsgodset_first.csv'
+          fetch_first_valid "$OUT/truth.csv" "$TRUTH" "$TRUTH_OLD" "$TRUTH_HTTP"
+
+      - name: Build image-only geometry models
+        env:
+          PYTHONPATH: vision_v1
+          PYTHONUNBUFFERED: '1'
+        run: |
+          mkdir -p output/production_readiness/geometry_models
+          for spec in '0:/tmp/native/cam0.mp4' '1:/tmp/native/cam1.mp4' '2:/tmp/native/cam2.mp4'; do
+            cam="${spec%%:*}"
+            video="${spec#*:}"
+            python tools/measure_command.py               --name "geometry_cam${cam}"               --json-out "output/production_readiness/geometry_cam${cam}.json"               -- python vision_v1/alfheim_geometry_refine.py                 --video "$video" --cam "$cam"                 --out output/production_readiness/geometry_models --samples 6
+          done
+
+      - name: Run measured V62 vision tracker
+        env:
+          PYTHONPATH: vision_v1
+          PYTHONUNBUFFERED: '1'
+        run: |
+          python tools/measure_command.py             --name v62_vision_tracker             --json-out output/production_readiness/v62_vision_tracker.json             -- python vision_v1/alfheim_benchmark_v62_finaltrack.py               --cam0 /tmp/native/cam0.mp4               --cam1 /tmp/native/cam1.mp4               --cam2 /tmp/native/cam2.mp4               --truth /tmp/native/truth.csv               --geometry-dir output/production_readiness/geometry_models               --out output/production_readiness/v62_final
+          python - <<'PY'
+          import json
+          d=json.load(open("output/production_readiness/v62_vision_tracker.json"))
+          assert d["returncode"] == 0
+          print("V62 measured command completed successfully")
+          PY
+
+      - name: Build media inventory from native source
+        run: |
+          python - <<'PY'
+          import json, subprocess
+          from pathlib import Path
+          cams=[]
+          for cam in range(3):
+              h264=Path(f"/tmp/native/cam{cam}.h264")
+              mp4=Path(f"/tmp/native/cam{cam}.mp4")
+              probe=json.loads(subprocess.check_output([
+                  "ffprobe","-v","error","-select_streams","v:0",
+                  "-show_entries","stream=width,height,r_frame_rate,duration",
+                  "-of","json",str(mp4)
+              ]))
+              st=probe["streams"][0]
+              duration=float(st.get("duration") or 0)
+              avg_mbps=(h264.stat().st_size*8/duration/1e6) if duration else 0.0
+              cams.append({
+                  "camera": cam,
+                  "native_h264_bytes": h264.stat().st_size,
+                  "native_h264_duration_s": duration,
+                  "avg_source_mbps": avg_mbps,
+                  "width": st.get("width"),
+                  "height": st.get("height"),
+                  "frame_rate": st.get("r_frame_rate"),
+              })
+          d={"cameras":cams}
+          print(json.dumps(d,indent=2))
+          Path("output/production_readiness/media_inventory.json").write_text(
+              json.dumps(d,indent=2), encoding="utf-8"
+          )
+          PY
+
+      - name: Run measured Analytics V24-V32 capacity benchmark
+        run: |
+          python tools/measure_command.py             --name analytics_v24_v32             --json-out output/production_readiness/analytics_process.json             -- python tools/production_readiness_benchmark.py               --tracking output/production_readiness/v62_final/matched_observations.csv               --out output/production_readiness/analytics
+
+      - name: Assemble Production Readiness report
+        run: |
+          python tools/assemble_production_readiness.py             --analytics output/production_readiness/analytics/analytics_benchmark.json             --analytics-process output/production_readiness/analytics_process.json             --vision output/production_readiness/v62_vision_tracker.json             --media output/production_readiness/media_inventory.json             --host output/production_readiness/host.json             --out output/production_readiness/production_readiness.json
+          cp output/production_readiness/analytics/analytics_report.md              output/production_readiness/analytics_report.md
+
+      - name: Enforce benchmark integrity
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path("output/production_readiness")
+          v=json.loads((root/"v62_vision_tracker.json").read_text())
+          a=json.loads((root/"analytics/analytics_benchmark.json").read_text())
+          r=json.loads((root/"production_readiness.json").read_text())
+          assert v["returncode"] == 0
+          assert a["fixture"]["frames"] > 0
+          assert a["capacity_stress"]["synthetic_frames"] > 1000
+          assert r["readiness_gates"]["real_video_processed"] is True
+          assert r["readiness_gates"]["analytics_engine_completed"] is True
+          assert r["readiness_gates"]["full_match_capacity_stress_completed"] is True
+          print(json.dumps(r, indent=2))
+          PY
+
+      - name: Upload Production Readiness package
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: centella-production-readiness
+          path: output/production_readiness/
+          if-no-files-found: warn
+          retention-days: 30
+          compression-level: 6
