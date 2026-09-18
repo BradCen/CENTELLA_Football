@@ -37,3 +37,7 @@ Missing observations are never silently converted to zero. Model-derived values 
 ## Validation
 
 GitHub Actions runs the analytics regression suite and dedicated Alfheim OOS benchmarks. The V60/V61/V62 final tracking benchmark completed successfully with ground-truth-blind inference and an integrity guard. The analytics production path still requires labelled real-match validation, production video-ingestion hardening, production model calibration, and a validated coach/player UI before it should be described as a finished commercial deployment.
+
+## Production Readiness
+
+The repository includes a reproducible Production Readiness / Hardware Benchmark covering real V62 multi-camera video, the V24–V32 analytics path, media/storage load and 90-minute Analytics capacity. See [docs/PRODUCTION_READINESS.md](docs/PRODUCTION_READINESS.md) and the `CENTELLA Production Readiness / Hardware Benchmark` GitHub Actions workflow.
