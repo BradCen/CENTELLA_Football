@@ -66,7 +66,8 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq ffmpeg
           python -m pip install --upgrade pip
-          pip install psutil torch torchvision --index-url https://download.pytorch.org/whl/cpu
+          pip install psutil
+          pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
           pip install ultralytics scipy pandas opencv-python-headless
 
       - name: Acquire exact OOS segments 0059-0061
