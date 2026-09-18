@@ -114,46 +114,74 @@ def run_analytics(frames: list[TrackingFrame]) -> tuple[dict, float, str, float]
     return report, wall, markdown, warm
 
 
-def synthesize_match(base_frames: list[TrackingFrame], match_minutes: float) -> list[TrackingFrame]:
-    if not base_frames:
+def expand_to_matchday_roster(frames: list[TrackingFrame], target_players: int) -> list[TrackingFrame]:
+    if not frames:
+        return []
+    target_players = max(2, int(target_players))
+    ordered = sorted(
+        {p.player_id: p for f in frames for p in f.players}.values(),
+        key=lambda p: (p.team != "home", p.player_id),
+    )
+    seeds = {
+        "home": [p for p in ordered if p.team == "home"] or [ordered[0]],
+        "away": [p for p in ordered if p.team == "away"] or [ordered[-1]],
+    }
+    roster: list[tuple[str, str, PlayerSample]] = []
+    per_team = target_players // 2
+    for team in ("home", "away"):
+        for i in range(per_team):
+            seed = seeds[team][i % len(seeds[team])]
+            roster.append((f"{team}_{i+1:02d}", team, seed))
+
+    expanded: list[TrackingFrame] = []
+    for frame in frames:
+        players: list[PlayerSample] = []
+        for idx, (pid, team, seed) in enumerate(roster):
+            template = next((p for p in frame.players if p.player_id == seed.player_id), frame.players[0])
+            # Small deterministic offsets spread cloned observations over the pitch.
+            row = idx % 4
+            col = (idx // 4) % 6
+            dx = (col - 2.5) * 1.6
+            dy = (row - 1.5) * 2.0
+            x = min(104.0, max(1.0, template.x + dx))
+            y = min(67.0, max(1.0, template.y + dy))
+            players.append(
+                PlayerSample(
+                    player_id=pid,
+                    team=team,
+                    x=x,
+                    y=y,
+                    t=frame.t,
+                    confidence=template.confidence,
+                    vx=template.vx,
+                    vy=template.vy,
+                    speed_mps=template.speed_mps,
+                    acceleration_mps2=template.acceleration_mps2,
+                    role=template.role,
+                    is_goalkeeper=template.is_goalkeeper and i == 0,
+                )
+            )
+        expanded.append(TrackingFrame(t=frame.t, players=players, ball=frame.ball))
+    return expanded
+
+
+def synthesize_match(base_frames: list[TrackingFrame], match_minutes: float, target_players: int) -> list[TrackingFrame]:
+    expanded = expand_to_matchday_roster(base_frames, target_players)
+    if not expanded:
         return []
 
-    base_start = base_frames[0].t
-    clean: list[TrackingFrame] = []
-
-    for frame in base_frames:
-        players = [
-            PlayerSample(
-                player_id=p.player_id,
-                team=p.team,
-                x=p.x,
-                y=p.y,
-                t=frame.t - base_start,
-                confidence=p.confidence,
-                vx=p.vx,
-                vy=p.vy,
-                speed_mps=p.speed_mps,
-                acceleration_mps2=p.acceleration_mps2,
-                role=p.role,
-                is_goalkeeper=p.is_goalkeeper,
-            )
-            for p in frame.players
-        ]
-        clean.append(TrackingFrame(t=frame.t - base_start, players=players, ball=frame.ball))
-
-    span = clean[-1].t if len(clean) > 1 else 1.0
-    deltas = [b.t - a.t for a, b in zip(clean, clean[1:]) if b.t > a.t]
+    span = expanded[-1].t if len(expanded) > 1 else 1.0
+    deltas = [b.t - a.t for a, b in zip(expanded, expanded[1:]) if b.t > a.t]
     cadence = statistics.median(deltas) if deltas else 0.125
     target_frames = max(2, int(round(match_minutes * 60.0 / cadence)))
 
     out: list[TrackingFrame] = []
     for idx in range(target_frames):
-        src = clean[idx % len(clean)]
-        cycle = idx // len(clean)
+        src = expanded[idx % len(expanded)]
+        cycle = idx // len(expanded)
         t = src.t + cycle * (span + cadence)
         if t > match_minutes * 60.0:
             break
-
         players = [
             PlayerSample(
                 player_id=p.player_id,
@@ -172,15 +200,14 @@ def synthesize_match(base_frames: list[TrackingFrame], match_minutes: float) -> 
             for p in src.players
         ]
         out.append(TrackingFrame(t=t, players=players, ball=src.ball))
-
     return out
-
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="CENTELLA Production Readiness analytics benchmark")
     ap.add_argument("--tracking", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--match-minutes", type=float, default=90.0)
+    ap.add_argument("--players", type=int, default=22)
     args = ap.parse_args()
 
     out = Path(args.out)
@@ -201,7 +228,7 @@ def main() -> int:
         if fixture["analytics_real_time_factor"] else None
     )
 
-    capacity_frames = synthesize_match(frames, args.match_minutes)
+    capacity_frames = synthesize_match(frames, args.match_minutes, args.players)
     cap_start = time.perf_counter()
     cap_engine = AnalyticsEngine()
     cap_report = cap_engine.analyze_team(capacity_frames, EventTimeline(), "home", "away")
@@ -215,7 +242,9 @@ def main() -> int:
 
     capacity = {
         "target_match_minutes": args.match_minutes,
+        "target_players": args.players,
         "synthetic_frames": len(capacity_frames),
+        "synthetic_players_per_frame": args.players,
         "wall_seconds": cap_wall,
         "frames_per_second": len(capacity_frames) / max(cap_wall, 1e-9),
         "equivalent_real_time_factor": (args.match_minutes * 60.0) / max(cap_wall, 1e-9),
