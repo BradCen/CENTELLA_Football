@@ -1,0 +1,86 @@
+name: CENTELLA Real-Video Analytics E2E
+
+on:
+  push:
+    branches: [centella-v24-football-intelligence]
+    paths:
+      - 'tools/video_to_analytics_e2e.py'
+      - 'centella_analytics/**'
+      - 'dashboard/index.html'
+      - '.github/workflows/centella-real-video-e2e.yml'
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'tools/video_to_analytics_e2e.py'
+      - 'centella_analytics/**'
+      - 'dashboard/index.html'
+      - '.github/workflows/centella-real-video-e2e.yml'
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  real-video-e2e:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install analytics runtime
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install numpy pytest
+
+      - name: Download verified real-video V62 artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p /tmp/v62
+          gh run download 34801719562             -R "${{ github.repository }}"             -n centella-alfheim-v60-v61-v62-final             -D /tmp/v62
+          test -s /tmp/v62/alfheim_v62/final/matched_observations.csv
+          test -s /tmp/v62/alfheim_v62/final/metrics.json
+
+      - name: Verify V62 used no ground truth during inference
+        run: |
+          python - <<'PY'
+          import json
+          p="/tmp/v62/alfheim_v62/final/metrics.json"
+          d=json.load(open(p, encoding="utf-8"))
+          assert d["inference_uses_ground_truth"] is False
+          assert d["anonymous_tracking_diagnostics"]["tracks_evaluated"] >= 5
+          print("V62 real-video tracking provenance guard: PASS")
+          print("anonymous <=4m:", d["anonymous_tracking_diagnostics"].get("match_rate_le_4m"))
+          PY
+
+      - name: Run tracking -> V24-V32 -> report E2E
+        run: |
+          python tools/video_to_analytics_e2e.py             --tracking /tmp/v62/alfheim_v62/final/matched_observations.csv             --out output/real_video_e2e
+
+      - name: Validate generated dashboard/report handoff
+        run: |
+          cp dashboard/index.html output/real_video_e2e/dashboard.html
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          out=Path("output/real_video_e2e")
+          report=json.loads((out/"report.json").read_text())
+          summary=json.loads((out/"summary.json").read_text())
+          assert report["version"] == "32.0.0"
+          assert report["tracking"]["frames"] > 0
+          assert report["event_inference"]["validated_ground_truth"] is False
+          assert summary["analysis_version"] == "32.0.0"
+          assert (out/"dashboard.html").stat().st_size > 1000
+          print("Report + dashboard handoff: PASS")
+          PY
+
+      - name: Upload complete E2E artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: centella-real-video-analytics-e2e
+          path: output/real_video_e2e/
+          retention-days: 30

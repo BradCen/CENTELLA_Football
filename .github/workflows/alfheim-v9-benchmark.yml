@@ -1,0 +1,63 @@
+name: CENTELLA Alfheim V20 Pure Optical-Lock Benchmark
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      - name: Install CPU runtime
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+          python -m pip install --upgrade pip
+          pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+          pip install ultralytics scipy pandas opencv-python-headless
+      - name: Download synchronized native cameras and 20 Hz truth
+        shell: bash
+        run: |
+          set -euxo pipefail
+          BASE='https://datasets.simula.no/downloads/alfheim/2013-11-03/First%20Half'
+          CURL='curl -fkL --connect-timeout 20 --retry 4 --retry-all-errors --retry-delay 2'
+          mkdir -p /tmp/native output/alfheim_v20
+          for cam in 0 1 2; do
+            mkdir -p "/tmp/native/$cam"
+            $CURL "$BASE/$cam/0056_2013-11-03%2018%3A01%3A14.248366000.h264" -o "/tmp/native/$cam/0056.h264"
+            $CURL "$BASE/$cam/0057_2013-11-03%2018%3A01%3A17.249311000.h264" -o "/tmp/native/$cam/0057.h264"
+            $CURL "$BASE/$cam/0058_2013-11-03%2018%3A01%3A20.250403000.h264" -o "/tmp/native/$cam/0058.h264"
+            cat "/tmp/native/$cam"/*.h264 > "/tmp/native/cam${cam}.h264"
+            ffmpeg -y -r 30 -i "/tmp/native/cam${cam}.h264" -c:v libx264 -preset ultrafast -crf 22 "/tmp/native/cam${cam}.mp4"
+          done
+          $CURL 'https://datasets.simula.no/downloads/alfheim/2013-11-03/zxy/2013-11-03_tromso_stromsgodset_first.csv' -o /tmp/native/truth.csv
+          test -s /tmp/native/truth.csv
+      - name: Run CENTELLA V20 benchmark
+        env:
+          PYTHONUNBUFFERED: '1'
+        run: |
+          python vision_v1/alfheim_benchmark_v20.py \
+            --cam0 /tmp/native/cam0.mp4 \
+            --cam1 /tmp/native/cam1.mp4 \
+            --cam2 /tmp/native/cam2.mp4 \
+            --truth /tmp/native/truth.csv \
+            --out output/alfheim_v20 \
+            --sample-fps 8.0 \
+            --calibration-seconds 4.0 \
+            --imgsz 1280 \
+            --model yolo11n.pt | tee output/alfheim_v20/run.log
+          cat output/alfheim_v20/metrics.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: centella-alfheim-v20-pure-optical-lock
+          path: output/alfheim_v20/
+          if-no-files-found: warn
+          retention-days: 14
